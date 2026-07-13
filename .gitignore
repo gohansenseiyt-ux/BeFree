@@ -1,0 +1,44 @@
+# Clés et secrets
+.env
+*.env
+.auth_tokens
+auth_debug.log
+
+# Données locales
+config.json
+stats.json
+session_en_cours.json
+hardcore_state.json
+whitelist.json
+detected_apps.json
+relaunch.lock
+
+# Cache logos
+.logo_cache/
+
+# Applications mises en quarantaine (ne JAMAIS committer d'exécutables déplacés)
+Quarantaine/*
+!Quarantaine/.gitkeep
+
+# Raccourci Windows spécifique à la machine
+Lancer BeFree.lnk
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution
+dist/
+build/
+*.spec
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+Desktop.ini

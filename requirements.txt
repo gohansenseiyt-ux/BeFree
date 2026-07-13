@@ -1,0 +1,9 @@
+customtkinter
+psutil
+pystray
+Pillow
+plyer
+pywin32
+keyring>=24.0.0
+matplotlib
+numpy
