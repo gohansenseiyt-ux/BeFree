@@ -37,6 +37,16 @@ L'interface suit une direction visuelle **« Sumi »** (encre de nuit, dojo/kend
 
 ## 🚀 Installation
 
+### Option 1 — Double-clic (le plus simple)
+
+1. Installe [Python](https://www.python.org/downloads/) si ce n'est pas déjà fait (coche **"Add python.exe to PATH"** pendant l'installation).
+2. Clone ou télécharge ce dépôt.
+3. Double-clique sur **`BeFree.bat`**.
+
+Un écran de chargement vérifie automatiquement les dépendances et installe celles qui manquent (via pip), puis lance l'application — comme une appli normale, sans étape manuelle. Les lancements suivants sont quasi instantanés (tout est déjà installé).
+
+### Option 2 — Ligne de commande
+
 ```bash
 # 1. Cloner le dépôt
 git clone https://github.com/gohansenseiyt-ux/BeFree.git
@@ -60,6 +70,7 @@ python main.py
 | Fichier | Rôle |
 |---|---|
 | `main.py` | Application principale (UI + logique). |
+| `launcher.pyw` | Lanceur : vérifie/installe les dépendances puis démarre `main.py`. |
 | `theme_sumi.py` | Palette de couleurs et polices (design system « Sumi »). |
 | `ui_elements.py` | Tableau de bord des statistiques. |
 | `chart_renderer.py` | Rendu des graphiques (matplotlib). |
