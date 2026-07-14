@@ -11,6 +11,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.ticker as ticker
 import matplotlib.font_manager as font_manager
 
+import theme_sumi
+
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 for _f in ("JetBrainsMono-Regular.ttf", "JetBrainsMono-Bold.ttf"):
     _path = os.path.join(_FONTS_DIR, _f)
@@ -20,8 +22,9 @@ for _f in ("JetBrainsMono-Regular.ttf", "JetBrainsMono-Bold.ttf"):
 MONO_FONT = "JetBrains Mono"
 
 _DEFAULT_COLORS = {
-    "bg": "#141210", "crimson": "#A82230",
-    "bar_fill": "#1F1B18", "text_dim": "#8A8071", "grid": "#1F1B18",
+    "bg": theme_sumi.SUMI_2, "crimson": theme_sumi.HANKO_DEEP,
+    "bar_fill": theme_sumi.SURFACE, "text_dim": theme_sumi.MUTED,
+    "grid": theme_sumi.SURFACE,
 }
 
 APP_COLORS = {
@@ -51,7 +54,7 @@ APP_BADGES = {
     "Notepad++": "[NPP]", "Sublime Text": "[SUB]", "Rider": "[RDR]",
 }
 
-_BG = "#0A0908"
+_BG = theme_sumi.SUMI
 
 
 def _smooth_curve(x, y, num_points=300):
@@ -240,7 +243,7 @@ def generate_app_chart(parent_frame, app_data, total_minutes,
     # Barre TOTAL (seulement si show_total)
     if show_total:
         ax.bar([n_apps], [total_minutes], width=0.4,
-               color="#E63946", zorder=3)
+               color=theme_sumi.HANKO, zorder=3)
 
     # Badges texte sur les barres d'applications
     for i, (name, minutes) in enumerate(data_sorted):
@@ -251,9 +254,9 @@ def generate_app_chart(parent_frame, app_data, total_minutes,
         try:
             ax.text(i, y_mid, badge,
                     fontfamily=MONO_FONT, fontsize=7, fontweight="bold",
-                    color="#E8DFCE", ha="center", va="center",
+                    color=theme_sumi.INK, ha="center", va="center",
                     bbox=dict(boxstyle="round,pad=0.15",
-                              facecolor="#28231F", edgecolor="#8A8071",
+                              facecolor=theme_sumi.SURFACE_HOVER, edgecolor=theme_sumi.MUTED,
                               linewidth=0.5))
         except Exception:
             pass
@@ -275,8 +278,8 @@ def _apply_bar_style(ax, x, valeurs, max_v, pal):
     for side in ("top", "right", "bottom", "left"):
         ax.spines[side].set_visible(False)
     ax.tick_params(axis="both", which="both", length=0)
-    ax.tick_params(axis="x", colors="#8A8071", labelsize=9)
-    ax.tick_params(axis="y", colors="#8A8071", labelsize=9)
+    ax.tick_params(axis="x", colors=theme_sumi.MUTED, labelsize=9)
+    ax.tick_params(axis="y", colors=theme_sumi.MUTED, labelsize=9)
 
     n = len(valeurs)
     ax.set_xticks(x)
@@ -311,12 +314,12 @@ def _apply_line_style(ax, x, labels, max_v, pal):
         ax.spines[side].set_visible(False)
     # Bordures bas et gauche très fines, quasi invisibles
     for side in ("bottom", "left"):
-        ax.spines[side].set_color("#1F1B18")
+        ax.spines[side].set_color(theme_sumi.SURFACE)
         ax.spines[side].set_linewidth(0.3)
 
     ax.tick_params(axis="both", which="both", length=0)
-    ax.tick_params(axis="x", colors="#8A8071", labelsize=8)
-    ax.tick_params(axis="y", colors="#8A8071", labelsize=8)
+    ax.tick_params(axis="x", colors=theme_sumi.MUTED, labelsize=8)
+    ax.tick_params(axis="y", colors=theme_sumi.MUTED, labelsize=8)
 
     n = len(labels)
     ax.set_xticks(range(n))
@@ -343,7 +346,7 @@ def _apply_line_style(ax, x, labels, max_v, pal):
             ticker.FuncFormatter(lambda x_val, _: f"{int(x_val)}m"))
 
     # Grille pointillée très discrète
-    ax.grid(axis="y", color="#A82230", linestyle=":", linewidth=0.4, alpha=0.05)
+    ax.grid(axis="y", color=theme_sumi.HANKO_DEEP, linestyle=":", linewidth=0.4, alpha=0.05)
     ax.set_axisbelow(True)
 
 
@@ -351,11 +354,11 @@ def _draw_empty_state(ax, pal):
     """État vide — grille pointillée + message."""
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.grid(axis="both", color="#1F1B18", linestyle=":", linewidth=0.5)
+    ax.grid(axis="both", color=theme_sumi.SURFACE, linestyle=":", linewidth=0.5)
     ax.set_axisbelow(True)
     ax.text(0.5, 0.5,
             "Aucune donnée de focus détectée.",
-            fontfamily=MONO_FONT, fontsize=11, color="#8A8071",
+            fontfamily=MONO_FONT, fontsize=11, color=theme_sumi.MUTED,
             ha="center", va="center", transform=ax.transAxes)
     for side in ("top", "right", "bottom", "left"):
         ax.spines[side].set_visible(False)

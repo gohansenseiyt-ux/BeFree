@@ -5,9 +5,15 @@ Filtres temporels + formatage pour l'écran Statistiques.
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta, date
 
-STATS_FILE = "stats.json"
+# Ancré sur le dossier de l'exe une fois empaqueté (PyInstaller --onefile),
+# jamais sur son dossier d'extraction temporaire — sinon les stats seraient
+# perdues à chaque relancement. Identique à DATA_DIR dans main.py.
+_DATA_DIR = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
+             else os.path.dirname(os.path.abspath(__file__)))
+STATS_FILE = os.path.join(_DATA_DIR, "stats.json")
 
 
 # ── Chargement / Sauvegarde ──
@@ -52,13 +58,15 @@ def charger_sessions():
     return []
 
 
-def sauvegarder_session(duree_minutes, app_name=None, objectif=None, hardcore=False):
+def sauvegarder_session(duree_minutes, app_name=None, objectif=None, hardcore=False,
+                         abandon=False):
     """
     Ajoute une session à stats.json avec un timestamp complet.
     duree_minutes : float, durée en minutes
     app_name     : str ou None (None = session globale Focus)
     objectif     : str ou None, l'engagement pris au démarrage (écran Contrat)
     hardcore     : bool, session lancée en mode Hardcore
+    abandon      : bool, session interrompue avant la fin (Tunnel de la Honte)
     """
     sessions = charger_sessions()
     now = datetime.now()
@@ -68,6 +76,7 @@ def sauvegarder_session(duree_minutes, app_name=None, objectif=None, hardcore=Fa
         "app_name": app_name,
         "objectif": objectif or "",
         "hardcore": bool(hardcore),
+        "abandon": bool(abandon),
     })
     try:
         with open(STATS_FILE, "w") as f:

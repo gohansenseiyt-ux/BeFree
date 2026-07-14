@@ -40,6 +40,179 @@ import theme_sumi
 theme_sumi.register_fonts()
 
 
+# =====================================================================
+#   CHEMINS — sources vs empaqueté (PyInstaller --onefile)
+# =====================================================================
+# BASE_DIR (plus bas) reste ancré sur __file__ : correct pour les ressources
+# LUES en lecture seule (polices, icônes, image) car PyInstaller --onefile
+# réécrit __file__ pour pointer dans son dossier d'extraction temporaire
+# (_MEIPASS), où ces ressources sont justement rassemblées via --add-data.
+#
+# DATA_DIR est différent : les fichiers ÉCRITS (stats, config, état Hardcore...)
+# ne doivent PAS vivre dans ce dossier temporaire, qui change à chaque
+# lancement — sinon toute donnée persistante serait perdue au redémarrage
+# suivant. DATA_DIR pointe donc vers le dossier du .exe lui-même une fois
+# empaqueté, ou vers le dossier du script en mode source (comportement
+# inchangé pour les développeurs).
+def _frozen() -> bool:
+    return getattr(sys, "frozen", False)
+
+
+def _app_identity_path() -> str:
+    """Chemin qui identifie « cette app » (ligne de commande, Registre) —
+    l'exe lui-même une fois empaqueté, ce script sinon."""
+    return sys.executable if _frozen() else os.path.abspath(__file__)
+
+
+DATA_DIR = os.path.dirname(sys.executable) if _frozen() else os.path.dirname(os.path.abspath(__file__))
+
+
+def _data_path(*parts) -> str:
+    return os.path.join(DATA_DIR, *parts)
+
+
+def _cmd_relancer(*extra_args) -> list:
+    """Commande pour relancer cette app (empaquetée ou depuis les sources),
+    avec des arguments additionnels (ex. --reprendre-hardcore, --watchdog-role)."""
+    if _frozen():
+        return [sys.executable, *extra_args]
+    return [sys.executable, os.path.abspath(__file__), *extra_args]
+
+
+# ── Rôle watchdog : ce même exécutable, invoqué avec --watchdog-role, se
+# comporte comme le gardien qui relance l'app si elle est tuée. Remplace
+# l'ancien watchdog.py comme script séparé : sous PyInstaller --onefile,
+# sys.executable est l'exe lui-même, donc « python watchdog.py » ne
+# fonctionne plus une fois empaqueté — on relance ce même exécutable avec
+# ce flag à la place. Doit s'exécuter et sortir AVANT toute init lourde
+# (fenêtre, polices custom) : c'est un simple processus de surveillance.
+if "--watchdog-role" in sys.argv:
+
+    def _wd_cle_hardcore_existe() -> bool:
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                  r"Software\Microsoft\Windows\CurrentVersion\Run",
+                                  0, winreg.KEY_QUERY_VALUE)
+            winreg.QueryValueEx(key, "*BeFreeHardcore")
+            winreg.CloseKey(key)
+            return True
+        except OSError:
+            return False
+
+    def _wd_est_vivant(pid: int) -> bool:
+        try:
+            p = psutil.Process(pid)
+            return p.is_running() and p.status() != psutil.STATUS_ZOMBIE
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return False
+
+    def _wd_une_instance_tourne() -> bool:
+        """True si une instance de l'app principale (hors watchdog) tourne déjà."""
+        identite = _app_identity_path()
+        for proc in psutil.process_iter(['pid', 'cmdline']):
+            try:
+                cmd = ' '.join(proc.info.get('cmdline') or [])
+                if identite in cmd and "--watchdog-role" not in cmd \
+                        and proc.info['pid'] != os.getpid():
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _wd_relancer_main(dir_app: str):
+        """Relance l'app principale si une session active est trouvée.
+        Verrou atomique partagé par tous les gardiens (A, B, tâche planifiée
+        --check-once) : un SEUL appelant relance réellement."""
+        lock_file = os.path.join(dir_app, "relaunch.lock")
+
+        if _wd_une_instance_tourne():
+            return  # déjà relancée par quelqu'un d'autre
+
+        try:
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+        except FileExistsError:
+            return  # un autre gardien a déjà le verrou, il s'en occupe
+        except Exception:
+            pass  # verrou indisponible : on continue quand même
+
+        try:
+            _wd_relancer_main_impl(dir_app)
+        finally:
+            try:
+                os.remove(lock_file)
+            except Exception:
+                pass
+
+    def _wd_relancer_main_impl(dir_app: str):
+        hc_file = os.path.join(dir_app, "hardcore_state.json")
+        etat = None
+        if os.path.exists(hc_file):
+            try:
+                with open(hc_file) as f:
+                    etat = json.load(f)
+            except Exception:
+                etat = None
+
+        if etat is not None and hc_integrity.verifier(etat):
+            if etat.get("actif"):
+                subprocess.Popen(
+                    _cmd_relancer("--reprendre-hardcore"),
+                    cwd=dir_app, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                )
+            return  # signature valide (actif ou fin légitime) : rien de plus à faire
+
+        if _wd_cle_hardcore_existe():
+            # Fichier absent, illisible ou signature invalide alors que la clé de
+            # démarrage Hardcore existe encore → tentative de contournement. On
+            # relance quand même, en signalant à l'app que l'état est corrompu.
+            subprocess.Popen(
+                _cmd_relancer("--reprendre-hardcore", "--etat-corrompu"),
+                cwd=dir_app, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            return
+
+        session_file = os.path.join(dir_app, "session_en_cours.json")
+        if os.path.exists(session_file):
+            try:
+                with open(session_file) as f:
+                    etat = json.load(f)
+                if etat.get("mode") == "libre":
+                    subprocess.Popen(
+                        _cmd_relancer(),
+                        cwd=dir_app, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                    )
+            except Exception:
+                pass
+
+    def _watchdog_role_main():
+        args = [a for a in sys.argv if a != "--watchdog-role"]
+
+        if "--check-once" in args:
+            idx = args.index("--check-once")
+            _wd_relancer_main(args[idx + 1])
+            return
+
+        if len(args) < 3:
+            return
+        dir_app = args[1]
+        main_pid = int(args[2])
+        # args[3] = gid ("A"/"B"/"S") — information seulement
+
+        while True:
+            time.sleep(1)
+            if _wd_est_vivant(main_pid):
+                continue
+            time.sleep(0.5)              # courte attente pour éviter un faux positif
+            if _wd_est_vivant(main_pid):
+                continue
+            _wd_relancer_main(dir_app)
+            break
+
+    _watchdog_role_main()
+    sys.exit(0)
+
+
 def _nom_utilisateur_local() -> str:
     """Nom d'affichage local (nom d'utilisateur Windows), capitalisé.
     Remplace l'ancien compte cloud — 100% local, aucune connexion requise."""
@@ -96,7 +269,7 @@ COLOR_SIDEBAR_TEXT = "#B8AF9E"
 COLOR_SIDEBAR_SEPARATOR = "#2A2622"
 
 FICHIER = "test.txt"
-DOSSIER_QUARANTAINE = "Quarantaine"
+DOSSIER_QUARANTAINE = _data_path("Quarantaine")
 ALWAYS_ALLOWED = {"Code.exe", "WindowsTerminal.exe", "cmd.exe", "powershell.exe",
                   "bash.exe", "WT.exe", "explorer.exe", "Explorer.EXE",
                   "Taskmgr.exe", "taskmgr.exe"}
@@ -207,9 +380,9 @@ DOSSIERS_RACCOURCIS = [
     os.path.expanduser("~\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs"),
 ]
 
-STATS_FILE = "stats.json"
-SESSION_FILE = "session_en_cours.json"
-CONFIG_FILE = "config.json"
+STATS_FILE = _data_path("stats.json")
+SESSION_FILE = _data_path("session_en_cours.json")
+CONFIG_FILE = _data_path("config.json")
 STARTUP_NAME = "HardcoreFocus"
 STARTUP_DIR = os.path.expanduser(
     "~\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
@@ -263,7 +436,7 @@ session_cfg = {
     "hardcore": False,     # Mode Hardcore activé pour cette session
 }
 whitelist_from_recap = False   # True = recap sans modif → pas d'écran verrouillage intermédiaire
-WHITELIST_FILE = "whitelist.json"
+WHITELIST_FILE = _data_path("whitelist.json")
 _wl_session_keys_cache: set = set()   # Calculé une seule fois au démarrage de session
 HOSTS_FILE = r"C:\Windows\System32\drivers\etc\hosts"
 HOSTS_MARKER_START = "# ==BeFree-block-start=="
@@ -274,7 +447,7 @@ quarantaine_active = False
 quarantaine_fin_ts = 0       # timestamp UNIX de fin
 
 # ── Détection dynamique d'applications ──
-DETECTED_APPS_FILE = "detected_apps.json"
+DETECTED_APPS_FILE = _data_path("detected_apps.json")
 detected_apps = []           # list of clean names ["Discord", "RobloxStudio", ...]
 
 # ── Anti-inactivité : pause automatique ──
@@ -618,11 +791,12 @@ def filtrer_applications(event=None):
                     enfant.pack_forget()
 
 # --- STATISTIQUES (lightweight, pour l'accueil) ---
-def sauvegarder_stats(minutes):
+def sauvegarder_stats(minutes, abandon=False):
     """Ajoute une session au nouveau format stats.json avec timestamp complet."""
     sauvegarder_session(minutes, app_name=None,
                          objectif=session_cfg.get("objectif") or contrat_objectif,
-                         hardcore=bool(session_cfg.get("hardcore")))
+                         hardcore=bool(session_cfg.get("hardcore")),
+                         abandon=abandon)
 
 def mettre_a_jour_stats_accueil():
     # Supprimé : la barre winstreak a été retirée de l'UI
@@ -707,10 +881,13 @@ def activer_bouton_sidebar(nom):
     global _sidebar_btn_actif
     _sidebar_btn_actif = nom
     for name, btn in _sidebar_boutons.items():
+        icons = _NAV_ICONS.get(name)
         if name == nom:
-            btn.configure(fg_color="#1F1B18", text_color="#E8DFCE")
+            btn.configure(fg_color="#1F1B18", text_color="#E8DFCE",
+                          image=icons["active"] if icons else None)
         else:
-            btn.configure(fg_color="transparent", text_color="#B8AF9E")
+            btn.configure(fg_color="transparent", text_color="#B8AF9E",
+                          image=icons["rest"] if icons else None)
     active_btn = _sidebar_boutons.get(nom)
     if active_btn is not None:
         active_btn.update_idletasks()
@@ -790,65 +967,141 @@ def valider_temps():
         root.after(3000, lambda: sous_titre_temps.configure(
             text="Combien de temps veux-tu travailler ?", text_color=COLOR_TEXT_DIM))
 
-# --- POP-UP DE CONFIRMATION ---
+# --- POP-UP DE CONFIRMATION HARDCORE (écran 12 du design) ---
 def ouvrir_confirmation():
+    """Popup de confirmation avant d'entrer en session Hardcore (Quarantaine) —
+    intercalée entre le choix du régime et le Contrat de travail. Ombre portée
+    dure 6px 6px 0 #E63946 (même pattern .place() que le feuillet Contrat)."""
     global popup
     if popup is not None and popup.winfo_exists():
         return
     popup = ctk.CTkToplevel(root)
-    popup.title("Confirmation")
+    popup.title("Confirmation Hardcore")
     popup.resizable(False, False)
     popup.transient(root)
     popup.grab_set()
-    popup.configure(fg_color="#E63946")
-    _centrer_popup(popup, 420, 240)
+    popup.configure(fg_color=theme_sumi.SUMI)
 
-    carte = ctk.CTkFrame(popup, fg_color="#141210", corner_radius=3,
-                          border_width=0)
-    carte.pack(fill="both", expand=True, padx=3, pady=3)
+    CARD_W = 520
+    holder = ctk.CTkFrame(popup, fg_color="transparent")
 
-    lbl = ctk.CTkLabel(carte, text="Prêt à entrer en Hardcore Focus ?",
-                         font=theme_sumi.serif(20, weight="semibold"), text_color="#E8DFCE")
-    lbl.pack(pady=(30, 5), padx=20)
+    # Ombre portée dure (décalée +6,+6, sans flou — box-shadow:6px 6px 0 #E63946)
+    ombre = ctk.CTkFrame(holder, fg_color=theme_sumi.HANKO, corner_radius=0, width=CARD_W)
+    ombre.place(x=6, y=6)
 
-    lbl2 = ctk.CTkLabel(carte, text="Toute application non cochée sera fermée.",
-                          font=theme_sumi.ui(12), text_color="#B8AF9E")
-    lbl2.pack(pady=(0, 20))
+    carte = ctk.CTkFrame(holder, fg_color=theme_sumi.SUMI_2, corner_radius=0,
+                          width=CARD_W, border_width=2, border_color=theme_sumi.HANKO)
+    carte.place(x=0, y=0)
 
-    frame_btn = ctk.CTkFrame(carte, fg_color="transparent")
-    frame_btn.pack()
+    # Badge coin (chevauche la bordure, top:-1 right:-1)
+    ctk.CTkLabel(carte, text="HARDCORE FOCUS", font=theme_sumi.mono(10),
+                 fg_color=theme_sumi.HANKO, text_color=theme_sumi.SUMI,
+                 corner_radius=0, padx=12, pady=6
+                 ).place(relx=1.0, x=-1, y=-1, anchor="ne")
 
-    btn_non = ctk.CTkButton(frame_btn, text="NON", width=100,
-                              fg_color="transparent", border_width=1, border_color="#E8DFCE",
-                              hover_color="#1F1B18",
-                              text_color="#E8DFCE", corner_radius=3,
-                              command=popup.destroy)
-    btn_non.pack(side="left", padx=10)
+    contenu = ctk.CTkFrame(carte, fg_color="transparent")
+    contenu.pack(fill="x", padx=40, pady=40)
 
-    if session_type == "pomodoro":
-        texte_oui = "🍅 C'est parti !"
-    elif mode_infini or session_type == "infini":
-        texte_oui = ">> GO"
-    else:
-        texte_oui = "OUI"
+    # Sceau
+    seal = ctk.CTkFrame(contenu, width=88, height=88, corner_radius=44,
+                         fg_color=theme_sumi.HANKO, border_width=2,
+                         border_color=theme_sumi.SUMI_2)
+    seal.pack()
+    seal.pack_propagate(False)
+    ctk.CTkLabel(seal, text="禅", font=theme_sumi.serif(44),
+                 text_color=theme_sumi.SUMI).place(relx=0.5, rely=0.5, anchor="center")
 
-    btn_oui = ctk.CTkButton(frame_btn, text=texte_oui, width=140,
-                              font=theme_sumi.ui(14, "bold"), corner_radius=3,
-                              fg_color="#E63946",
-                              hover_color="#A82230",
-                              text_color="#0A0908",
-                              command=lancer_focus_depuis_popup)
-    btn_oui.pack(side="left", padx=10)
+    ctk.CTkLabel(contenu, text="Prêt à entrer\nen Hardcore Focus ?",
+                 font=theme_sumi.serif(32), text_color=theme_sumi.INK,
+                 justify="center").pack(pady=(20, 0))
 
-def lancer_focus_depuis_popup():
-    global popup
-    if popup and popup.winfo_exists():
+    ctk.CTkLabel(
+        contenu,
+        text="Une fois entré, tu ne peux plus arrêter la session avant la fin —",
+        font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
+        wraplength=440, justify="center").pack(pady=(12, 0))
+    ctk.CTkLabel(
+        contenu, text="ni pause, ni annulation.",
+        font=theme_sumi.ui(12, "bold"), text_color=theme_sumi.HANKO,
+        justify="center").pack()
+    ctk.CTkLabel(
+        contenu, text="Les .exe distraction seront mis en quarantaine.",
+        font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
+        wraplength=440, justify="center").pack(pady=(2, 0))
+
+    # Bloc infos : durée verrouillée + récompense (dynamiques, session_cfg/_TS_REGIMES)
+    bloc = ctk.CTkFrame(contenu, fg_color=theme_sumi.SURFACE, corner_radius=0,
+                         border_width=1, border_color=theme_sumi.RULE)
+    bloc.pack(fill="x", pady=(20, 0))
+    bloc_inner = ctk.CTkFrame(bloc, fg_color="transparent")
+    bloc_inner.pack(fill="x", padx=16, pady=14)
+
+    nb_jours = session_cfg.get("nb_jours", 1)
+    ligne_duree = ctk.CTkFrame(bloc_inner, fg_color="transparent")
+    ligne_duree.pack(fill="x")
+    ctk.CTkLabel(ligne_duree, text="DURÉE VERROUILLÉE", font=theme_sumi.mono(10),
+                 text_color=theme_sumi.MUTED, anchor="w").pack(side="left")
+    ctk.CTkLabel(ligne_duree, text=f"{nb_jours}j 00:00:00", font=theme_sumi.mono(20),
+                 text_color=theme_sumi.INK, anchor="e").pack(side="right")
+
+    pts_txt = next((r[5] for r in _TS_REGIMES if r[0] == "quarantaine"),
+                    "+10 PTS / JOUR TENU")
+    ligne_recomp = ctk.CTkFrame(bloc_inner, fg_color="transparent")
+    ligne_recomp.pack(fill="x", pady=(8, 0))
+    ctk.CTkLabel(ligne_recomp, text="RÉCOMPENSE SI TENU", font=theme_sumi.mono(10),
+                 text_color=theme_sumi.MUTED, anchor="w").pack(side="left")
+    ctk.CTkLabel(ligne_recomp, text=pts_txt, font=theme_sumi.mono(14),
+                 text_color=theme_sumi.GOLD, anchor="e").pack(side="right")
+
+    # Checkbox de confirmation — gate le bouton "Entrer en Hardcore"
+    var_comprends = ctk.BooleanVar(value=False)
+
+    def _toggle_check():
+        btn_entrer.configure(state="normal" if var_comprends.get() else "disabled")
+
+    ctk.CTkCheckBox(
+        contenu, text="Je comprends que je ne pourrai pas revenir en arrière.",
+        variable=var_comprends, onvalue=True, offvalue=False,
+        font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
+        checkbox_width=16, checkbox_height=16, corner_radius=0,
+        border_width=1, border_color=theme_sumi.INK,
+        fg_color=theme_sumi.INK, checkmark_color=theme_sumi.SUMI,
+        hover_color=theme_sumi.INK, command=_toggle_check
+    ).pack(anchor="w", pady=(12, 0))
+
+    frame_btn = ctk.CTkFrame(contenu, fg_color="transparent")
+    frame_btn.pack(fill="x", pady=(20, 0))
+
+    def _annuler():
         popup.destroy()
-        popup = None
-    if session_type == "pomodoro":
-        demarrer_pomodoro()
-    else:
-        demarrer()
+
+    def _confirmer_hardcore():
+        popup.destroy()
+        slide_vers(ecran_contrat, ecran_type_session)
+
+    ctk.CTkButton(frame_btn, text="Annuler", height=44, width=180,
+                  font=theme_sumi.ui(13), corner_radius=0,
+                  fg_color="transparent", hover_color=theme_sumi.SURFACE,
+                  border_width=1, border_color=theme_sumi.INK, text_color=theme_sumi.INK,
+                  command=_annuler).pack(side="left")
+
+    btn_entrer = ctk.CTkButton(
+        frame_btn, text="Entrer en Hardcore   ▶", height=44, width=250,
+        font=theme_sumi.ui(13, "bold"), corner_radius=0,
+        fg_color=theme_sumi.HANKO, hover_color=theme_sumi.HANKO_DEEP,
+        text_color=theme_sumi.SUMI, state="disabled",
+        command=_confirmer_hardcore)
+    btn_entrer.pack(side="left", padx=(10, 0))
+
+    # La hauteur de la carte dépend du texte réellement rendu (retours à la
+    # ligne) → mesurée après construction plutôt que codée en dur, pour ne
+    # jamais tronquer le contenu.
+    popup.update_idletasks()
+    h = carte.winfo_reqheight()
+    ombre.configure(height=h)
+    holder.configure(width=CARD_W + 6, height=h + 6)
+    holder.place(relx=0.5, rely=0.5, anchor="center")
+    _centrer_popup(popup, CARD_W + 66, h + 66)
 
 # --- FERMETURE FORCÉE ---
 def fermer_application(process_obj, nom_process):
@@ -876,9 +1129,7 @@ def _session_watchdog_activer():
     global _SW_PROC
     # Clé registre → relance au redémarrage du PC
     try:
-        python = sys.executable
-        script = os.path.abspath(__file__)
-        cmd = f'"{python}" "{script}"'
+        cmd = " ".join(f'"{a}"' for a in _cmd_relancer())
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _SW_REG_KEY, 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(key, _SW_REG_VALUE, 0, winreg.REG_SZ, cmd)
         winreg.CloseKey(key)
@@ -887,12 +1138,9 @@ def _session_watchdog_activer():
 
     # Watchdog subprocess (survit à la mort du parent grâce à DETACHED_PROCESS)
     try:
-        wd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchdog.py")
         _SW_PROC = subprocess.Popen(
-            [sys.executable, wd,
-             str(os.getpid()),
-             os.path.abspath(__file__),
-             "47831"],                         # port distinct du mode Hardcore
+            _cmd_relancer("--watchdog-role", DATA_DIR, str(os.getpid()), "S"),
+            cwd=DATA_DIR,
             creationflags=0x00000008 | subprocess.CREATE_NEW_PROCESS_GROUP,  # DETACHED_PROCESS
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
@@ -929,8 +1177,8 @@ _HC_WATCHDOG_PROCS   = []      # deux gardiens détachés [Popen, Popen]
 _HC_MINI_TIMER_WIN   = None
 _HC_REPRISE          = False   # True si la session a été reprise après un kill/redémarrage
 
-_HC_STATE_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hardcore_state.json")
-_HC_LOCK_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "relaunch.lock")
+_HC_STATE_FILE  = _data_path("hardcore_state.json")
+_HC_LOCK_FILE   = _data_path("relaunch.lock")
 _HC_REG_KEY     = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _HC_REG_VALUE   = "*BeFreeHardcore"   # préfixe '*' = Windows l'exécute aussi en Mode sans échec
 
@@ -974,7 +1222,8 @@ def _hc_effacer():
     """Fin légitime du Mode Hardcore (victoire/abandon autorisé).
     On n'efface PAS le fichier : on écrit un tombstone signé actif=False. Un fichier
     manquant alors que la clé de démarrage existe encore devient ainsi un signal de
-    falsification (voir watchdog.py) plutôt qu'une fin de session normale indétectable."""
+    falsification (voir le rôle --watchdog-role plus haut) plutôt qu'une fin de
+    session normale indétectable."""
     try:
         tombstone = hc_integrity.signer({"actif": False, "ts_fin": time.time()})
         with open(_HC_STATE_FILE, "w", encoding="utf-8") as f:
@@ -991,9 +1240,7 @@ def _hc_effacer():
 
 def _hc_enregistrer_redemarrage():
     try:
-        python = sys.executable
-        script = os.path.abspath(__file__)
-        cmd = f'"{python}" "{script}" --reprendre-hardcore'
+        cmd = " ".join(f'"{a}"' for a in _cmd_relancer("--reprendre-hardcore"))
         key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _HC_REG_KEY, 0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(key, _HC_REG_VALUE, 0, winreg.REG_SZ, cmd)
         winreg.CloseKey(key)
@@ -1011,10 +1258,9 @@ def _hc_tick_sauvegarde():
 
 def _hc_spawn_gardien(gid: str):
     """Lance un gardien détaché (A ou B) qui surveille l'app principale."""
-    wd     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchdog.py")
-    script = os.path.abspath(__file__)
     return subprocess.Popen(
-        [sys.executable, wd, script, str(os.getpid()), gid],
+        _cmd_relancer("--watchdog-role", DATA_DIR, str(os.getpid()), gid),
+        cwd=DATA_DIR,
         creationflags=0x00000008 | subprocess.CREATE_NEW_PROCESS_GROUP,  # DETACHED_PROCESS
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
@@ -1046,12 +1292,14 @@ def _hc_task_creer():
     (qui sont eux-mêmes des process python.exe), elle survit à un kill simultané de
     TOUS les process python.exe — Task Scheduler la redéclenche à la minute suivante."""
     try:
-        wd = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchdog.py")
-        script = os.path.abspath(__file__)
-        pythonw = sys.executable.replace("python.exe", "pythonw.exe")
-        if not os.path.exists(pythonw):
-            pythonw = sys.executable
-        tr = f'"{pythonw}" "{wd}" --check-once "{script}"'
+        if _frozen():
+            tr = f'"{sys.executable}" --watchdog-role --check-once "{DATA_DIR}"'
+        else:
+            pythonw = sys.executable.replace("python.exe", "pythonw.exe")
+            if not os.path.exists(pythonw):
+                pythonw = sys.executable
+            tr = (f'"{pythonw}" "{os.path.abspath(__file__)}" '
+                  f'--watchdog-role --check-once "{DATA_DIR}"')
         subprocess.run(
             ["schtasks", "/create", "/f", "/sc", "MINUTE", "/mo", "1",
              "/tn", _HC_TASK_NAME, "/tr", tr],
@@ -1225,8 +1473,8 @@ def hc_reprendre_apres_redemarrage():
     """Reprend une session hardcore interrompue par un redémarrage ou un kill.
 
     Cas normal : hardcore_state.json signé et 'actif' → on restaure l'état exact.
-    Cas falsification (--etat-corrompu, posé par watchdog.py quand le fichier a été
-    trafiqué/supprimé alors que la clé de démarrage Hardcore existait encore) : on ne
+    Cas falsification (--etat-corrompu, posé par le rôle --watchdog-role quand le
+    fichier a été trafiqué/supprimé alors que la clé de démarrage Hardcore existait encore) : on ne
     fait PAS confiance au fichier, mais on refuse quand même de laisser filer — on
     relance une session Hardcore par défaut et on compte une violation."""
     global temps_restant, _HC_VIOLATIONS, _HC_REPRISE
@@ -1299,6 +1547,9 @@ def abandonner_session():
     _session_deverrouiller_fenetre()
     btn_terminer_infini.pack_forget()
     btn_abandonner.pack()
+    # Enregistre la session malgré l'abandon (statut ABANDON dans "Dernières sessions")
+    duree_ecoulee_min = max(1, int(secondes_focus // 60))
+    sauvegarder_stats(duree_ecoulee_min, abandon=True)
     supprimer_etat()
     rafraichir_accueil()
     montrer_ecran(ecran_accueil)
@@ -1404,6 +1655,11 @@ def _surveiller_processus():
                     text=f"⚠  {app_bloquee} — ferme-le toi-même dans "
                          f"{soft_correction_countdown}s ou il sera fermé de force",
                     text_color="orange")
+        if session_cfg.get("hardcore") and soft_correction_active:
+            _afficher_violation_hardcore(app_bloquee, soft_correction_countdown)
+        else:
+            _fermer_violation_hardcore()
+        _rafraichir_barre_session_bas()
         return True
     else:
         if soft_correction_active:
@@ -1414,6 +1670,8 @@ def _surveiller_processus():
                 text="✓  Bonne décision — retour au focus", text_color="#7A9B5C")
             root.after(2000, lambda: label_statut.configure(
                 text="", text_color=COLOR_TEXT_DIM))
+        _fermer_violation_hardcore()
+        _rafraichir_barre_session_bas()
         return False
 
 
@@ -2381,12 +2639,15 @@ def basculer_demarrage_auto(activer):
 
     if activer:
         os.makedirs(STARTUP_DIR, exist_ok=True)
-        script_path = os.path.abspath(__file__)
         shell = win32com.client.Dispatch("WScript.Shell")
         shortcut = shell.CreateShortcut(chemin_lnk)
-        shortcut.TargetPath = sys.executable
-        shortcut.Arguments = f'"{script_path}"'
-        shortcut.WorkingDirectory = os.path.dirname(script_path)
+        if _frozen():
+            shortcut.TargetPath = sys.executable
+            shortcut.Arguments = ""
+        else:
+            shortcut.TargetPath = sys.executable
+            shortcut.Arguments = f'"{os.path.abspath(__file__)}"'
+        shortcut.WorkingDirectory = DATA_DIR
         shortcut.Description = "Hardcore Focus - Productivité sans distraction"
         shortcut.Save()
     else:
@@ -2478,6 +2739,7 @@ def restaurer_session(etat):
 
     # Restaurer le mode dans session_cfg pour que on_fermeture() le connaisse
     session_cfg["mode"] = etat.get("mode", "tunnel")
+    _preparer_ecran_session()
 
     # Durée pendant laquelle le PC était éteint (affiché dans le popup)
     saved_ts = etat.get("timestamp", 0)
@@ -2647,10 +2909,9 @@ def cacher_dans_tray():
 def _relancer_depuis_libre():
     """Mode Libre : sauvegarde l'état et relance instantanément l'app."""
     sauvegarder_etat()
-    script = os.path.abspath(__file__)
     subprocess.Popen(
-        [sys.executable, script],
-        cwd=os.path.dirname(script),
+        _cmd_relancer(),
+        cwd=DATA_DIR,
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -3728,6 +3989,7 @@ def ouvrir_contrat():
         num_session = len(charger_sessions()) + 1
     except Exception:
         num_session = 1
+    session_cfg["num_session"] = num_session
     lbl_contrat_meta.configure(text=f"CONTRAT DE TRAVAIL · SESSION #{num_session}")
     now = datetime.now()
     lbl_contrat_date.configure(text=now.strftime("%d·%m·%Y · %H:%M"))
@@ -3892,6 +4154,7 @@ BF_FONT_LINK         = ("Segoe UI", 11)
 # --- FENÊTRE PRINCIPALE ---
 root = ctk.CTk()
 root.title("BeFree")
+root.iconbitmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "befree.ico"))
 root.configure(fg_color=BF_COLOR_BG)
 
 # ======================= SIDEBAR =======================
@@ -3934,8 +4197,9 @@ ctk.CTkLabel(_wordmark_row, text=".", font=theme_sumi.serif(22),
 ctk.CTkLabel(logo_frame, text="v3.0 — HARDCORE", font=theme_sumi.mono(8),
              text_color="#8A8071").pack(pady=(2, 0))
 
-# ── Sections de navigation (fidèle au mockup : texte seul, pas d'icônes) ──
+# ── Sections de navigation (icônes trait fin dessinées au runtime, fidèle au design) ──
 _sidebar_boutons = {}
+_NAV_ICONS = theme_sumi.build_nav_icons()
 
 
 def _sidebar_section_label(texte):
@@ -3950,6 +4214,8 @@ def _sidebar_nav_item(page_id, libelle):
         text=libelle,
         font=theme_sumi.ui(13),
         anchor="w",
+        image=_NAV_ICONS[page_id]["rest"],
+        compound="left",
         fg_color="transparent",
         text_color=BF_COLOR_SIDEBAR_T,
         hover_color=BF_COLOR_SIDEBAR_H,
@@ -4060,28 +4326,38 @@ lbl_accueil_sous_titre = ctk.CTkLabel(conteneur_accueil, text="",
                                        anchor="w")
 lbl_accueil_sous_titre.pack(fill="x", pady=(4, 0))
 
-# ── Grille de 3 statistiques (bordures 1px = grille, cellules = surface) ──
+# ── Eyebrow de section unique (fidèle au mockup : un seul "CETTE SEMAINE"
+# au-dessus de la grille, pas un label répété par carte) ──
+ctk.CTkLabel(conteneur_accueil, text="CETTE SEMAINE", font=theme_sumi.mono(9),
+             text_color="#8A8071", anchor="w"
+             ).pack(fill="x", pady=(26, 0))
+
+# ── Grille de 3 statistiques — colonnes 1.6fr / 1fr / 1fr (carte "Temps
+# focus" élargie, comme le mockup), bordures 1px = grille, cellules = surface ──
 _accueil_grid_bg = ctk.CTkFrame(conteneur_accueil, fg_color="#2A2622", corner_radius=0)
-_accueil_grid_bg.pack(fill="x", pady=(26, 0))
+_accueil_grid_bg.pack(fill="x", pady=(8, 0))
+
+_ACCUEIL_CARTES = (
+    # (clé, titre, taille_police_valeur, largeur_relative)
+    ("semaine", "TEMPS FOCUS", 40, 16),
+    ("sessions", "SESSIONS", 32, 10),
+    ("serie", "SÉRIE", 32, 10),
+)
 
 _accueil_stat_cells = {}
-for _i, _key in enumerate(("semaine", "sessions", "serie")):
+for _i, (_key, _titre, _taille, _poids) in enumerate(_ACCUEIL_CARTES):
     _cell = ctk.CTkFrame(_accueil_grid_bg, fg_color="#141210", corner_radius=0)
     _cell.grid(row=0, column=_i, sticky="nsew", padx=(1 if _i > 0 else 0, 0), pady=0)
-    _accueil_grid_bg.grid_columnconfigure(_i, weight=1)
-    ctk.CTkLabel(_cell, text="", font=theme_sumi.mono(10), text_color="#8A8071",
+    _accueil_grid_bg.grid_columnconfigure(_i, weight=_poids)
+    ctk.CTkLabel(_cell, text=_titre, font=theme_sumi.mono(10), text_color="#8A8071",
                  anchor="w").pack(fill="x", padx=18, pady=(16, 0))
-    _lbl_valeur = ctk.CTkLabel(_cell, text="—", font=theme_sumi.mono(28),
+    _lbl_valeur = ctk.CTkLabel(_cell, text="—", font=theme_sumi.mono(_taille),
                                 text_color="#E8DFCE", anchor="w")
     _lbl_valeur.pack(fill="x", padx=18, pady=(4, 0))
     _lbl_legende = ctk.CTkLabel(_cell, text="", font=theme_sumi.ui(11),
                                  text_color="#B8AF9E", anchor="w")
     _lbl_legende.pack(fill="x", padx=18, pady=(0, 16))
     _accueil_stat_cells[_key] = {"cellule": _cell, "valeur": _lbl_valeur, "legende": _lbl_legende}
-# En-têtes (label du haut) — remplis à part pour garder l'accès aux widgets valeur/légende
-_accueil_stat_cells["semaine"]["cellule"].winfo_children()[0].configure(text="CETTE SEMAINE")
-_accueil_stat_cells["sessions"]["cellule"].winfo_children()[0].configure(text="SESSIONS")
-_accueil_stat_cells["serie"]["cellule"].winfo_children()[0].configure(text="SÉRIE")
 
 # ── Boutons d'action ──
 _accueil_actions = ctk.CTkFrame(conteneur_accueil, fg_color="transparent")
@@ -4178,7 +4454,7 @@ def rafraichir_accueil():
     lbl_accueil_sous_titre.configure(text=sous_titre)
 
     _accueil_stat_cells["semaine"]["valeur"].configure(text=heures_semaine)
-    _accueil_stat_cells["semaine"]["legende"].configure(text="heures de focus")
+    _accueil_stat_cells["semaine"]["legende"].configure(text="heures cumulées")
     _accueil_stat_cells["sessions"]["valeur"].configure(text=f"{nb_sessions_reel:02d}")
     _accueil_stat_cells["sessions"]["legende"].configure(text="complétées")
     _accueil_stat_cells["serie"]["valeur"].configure(text=f"{serie:02d}", text_color="#E63946")
@@ -4202,6 +4478,14 @@ def rafraichir_accueil():
         objectif = (s.get("objectif") or "").strip() or "Session focus"
         duree = formater_duree(s.get("duree_minutes", 0))
         hardcore = bool(s.get("hardcore"))
+        abandon = bool(s.get("abandon"))
+
+        if abandon:
+            statut_texte, statut_couleur = "ABANDON", "#D4A24C"
+        elif hardcore:
+            statut_texte, statut_couleur = "HARDCORE", "#E63946"
+        else:
+            statut_texte, statut_couleur = "TERMINÉE", "#7A9B5C"
 
         row = ctk.CTkFrame(_accueil_recent_list, fg_color="transparent")
         row.pack(fill="x")
@@ -4213,15 +4497,15 @@ def rafraichir_accueil():
                      anchor="w").pack(side="left", fill="x", expand=True, pady=14)
         ctk.CTkLabel(row, text=duree, font=theme_sumi.mono(11),
                      text_color="#E8DFCE", anchor="e").pack(side="left", padx=(10, 16), pady=14)
-        ctk.CTkLabel(row, text="HARDCORE" if hardcore else "TERMINÉE",
+        ctk.CTkLabel(row, text=statut_texte,
                      font=theme_sumi.mono(10),
-                     text_color="#E63946" if hardcore else "#7A9B5C",
+                     text_color=statut_couleur,
                      anchor="e").pack(side="left", pady=14)
 
 # ======================= ÉCRAN 2 — STATS =======================
 ecran_stats = ctk.CTkFrame(content_frame, fg_color="transparent")
 
-stats_manager = StatsManager("stats.json")
+stats_manager = StatsManager(STATS_FILE)
 stats_dashboard = StatsDashboard(ecran_stats, stats_manager,
                                   on_export=lambda: exporter_statistiques())
 
@@ -4241,7 +4525,7 @@ def reinitialiser_donnees():
         return
 
     try:
-        with open("stats.json", "w") as f:
+        with open(STATS_FILE, "w") as f:
             json.dump([], f, indent=2)
     except Exception:
         messagebox.showerror("Erreur",
@@ -4743,10 +5027,10 @@ _contrat_holder = ctk.CTkFrame(ecran_contrat, fg_color="transparent",
 _contrat_holder.place(relx=0.5, rely=0.5, anchor="center")
 _contrat_holder.pack_propagate(False)
 
-# Ombre portée (décalée +18,+18 comme le box-shadow du mockup)
+# Ombre portée (décalée +20,+20 exact comme le box-shadow du mockup : 20px 20px 0 #141210)
 _contrat_shadow = ctk.CTkFrame(_contrat_holder, fg_color="#141210", corner_radius=0,
                                 width=640, height=584)
-_contrat_shadow.place(x=18, y=18)
+_contrat_shadow.place(x=20, y=20)
 
 # Feuillet
 _contrat_paper = ctk.CTkFrame(_contrat_holder, fg_color="#F2E8D3", corner_radius=0,
@@ -4765,7 +5049,7 @@ lbl_contrat_meta = ctk.CTkLabel(conteneur_contrat,
 lbl_contrat_meta.pack(fill="x")
 
 ctk.CTkLabel(conteneur_contrat, text="Contrat de travail",
-             font=theme_sumi.serif(38), text_color="#1A1613",
+             font=theme_sumi.serif(40), text_color="#1A1613",
              anchor="w").pack(fill="x", pady=(4, 0))
 
 lbl_contrat_intro = ctk.CTkLabel(
@@ -4837,36 +5121,143 @@ ctk.CTkButton(frame_contrat_btns, text="Je m'engage   ▶", width=200, height=44
               fg_color="#1A1613", hover_color="#0A0908", text_color="#F2E8D3",
               command=valider_contrat).pack(side="right")
 
-# ======================= ÉCRAN — SESSION =======================
-ecran_session = ctk.CTkFrame(content_frame, fg_color="transparent")
+# ======================= ÉCRAN — SESSION (fidèle au mockup : barre haut,
+# zone centrale, barre bas) =======================
+ecran_session = ctk.CTkFrame(content_frame, fg_color="#0A0908")
 
 conteneur_session = ctk.CTkFrame(ecran_session, fg_color="transparent")
-conteneur_session.place(relx=0.5, rely=0.45, anchor="center")
+conteneur_session.pack(fill="both", expand=True, padx=60, pady=40)
 
-label_chrono = ctk.CTkLabel(conteneur_session, text="--:--",
-                              font=theme_sumi.mono(72), text_color=BF_COLOR_ACCENT_CRIMSON)
-label_chrono.pack(pady=(0, 5))
+# ── Barre du haut : point clignotant + régime/apps · début-fin ──
+_session_barre_haut = ctk.CTkFrame(conteneur_session, fg_color="transparent")
+_session_barre_haut.pack(fill="x")
 
-label_statut = ctk.CTkLabel(conteneur_session, text="", font=("Segoe UI", 13),
-                              text_color=COLOR_TEXT_DIM)
-label_statut.pack(pady=(0, 8))
+_session_point_frame = ctk.CTkFrame(_session_barre_haut, fg_color="transparent")
+_session_point_frame.pack(side="left")
+_session_point = ctk.CTkFrame(_session_point_frame, width=8, height=8, corner_radius=4,
+                               fg_color="#7A9B5C")
+_session_point.pack(side="left", pady=2)
+
+
+def _session_point_clignoter(_visible=[True]):
+    """Simule l'animation CSS caretBlink (1.6s, opacité 50%) — purement
+    visuel, indépendant de toute logique de session."""
+    _visible[0] = not _visible[0]
+    try:
+        _session_point.configure(fg_color="#7A9B5C" if _visible[0] else "#1C2913")
+    except Exception:
+        pass
+    root.after(800, _session_point_clignoter)
+
+
+_session_point_clignoter()
+
+lbl_session_focus_top = ctk.CTkLabel(_session_point_frame, text="",
+                                      font=theme_sumi.mono(10), text_color="#B8AF9E",
+                                      anchor="w")
+lbl_session_focus_top.pack(side="left", padx=(10, 0))
+
+lbl_session_debut_fin = ctk.CTkLabel(_session_barre_haut, text="",
+                                      font=theme_sumi.mono(10), text_color="#8A8071",
+                                      anchor="e")
+lbl_session_debut_fin.pack(side="right")
+
+# ── Zone centrale (expand, centrée) ──
+_session_centre = ctk.CTkFrame(conteneur_session, fg_color="transparent")
+_session_centre.pack(fill="both", expand=True)
 
 label_objectif_session = ctk.CTkLabel(
-    conteneur_session, text="", font=theme_sumi.serif(16, italic=True),
-    text_color="#B8AF9E", wraplength=480, justify="center")
-label_objectif_session.pack(pady=(0, 20))
+    _session_centre, text="", font=theme_sumi.serif(20, italic=True),
+    text_color="#B8AF9E", wraplength=640, justify="center")
+label_objectif_session.pack(pady=(0, 8))
 
-btn_terminer_infini = ctk.CTkButton(conteneur_session, text="Terminer la session",
+lbl_session_attribution = ctk.CTkLabel(_session_centre, text="",
+                                        font=theme_sumi.mono(10), text_color="#8A8071")
+lbl_session_attribution.pack()
+
+label_chrono = ctk.CTkLabel(_session_centre, text="--:--",
+                              font=theme_sumi.mono(128), text_color=BF_COLOR_ACCENT_CRIMSON)
+label_chrono.pack(pady=(28, 0))
+
+label_statut = ctk.CTkLabel(_session_centre, text="", font=("Segoe UI", 13),
+                              text_color=COLOR_TEXT_DIM)
+label_statut.pack(pady=(8, 0))
+
+_session_chips = ctk.CTkFrame(_session_centre, fg_color="transparent")
+_session_chips.pack(pady=(32, 0))
+
+# ── Barre du bas : distractions/temps focus à gauche, actions à droite ──
+_session_barre_bas = ctk.CTkFrame(conteneur_session, fg_color="transparent")
+_session_barre_bas.pack(fill="x", side="bottom")
+
+lbl_session_bas_gauche = ctk.CTkLabel(_session_barre_bas, text="",
+                                       font=theme_sumi.mono(11), text_color="#B8AF9E")
+lbl_session_bas_gauche.pack(side="left")
+
+_session_actions = ctk.CTkFrame(_session_barre_bas, fg_color="transparent")
+_session_actions.pack(side="right")
+
+btn_terminer_infini = ctk.CTkButton(_session_actions, text="Terminer la session",
                                       font=("Segoe UI", 14, "bold"), height=44,
                                       fg_color="#5C7A46", corner_radius=3,
                                       hover_color="#5C7A46",
                                       command=terminer_session_infini)
 
-btn_abandonner = ctk.CTkButton(conteneur_session, text="Abandonner", width=200,
+btn_abandonner = ctk.CTkButton(_session_actions, text="Abandonner", width=200,
                                  font=("Segoe UI", 12), corner_radius=3,
                                  fg_color="#A82230", hover_color="#A82230",
                                  command=ouvrir_tunnel_honte)
 btn_abandonner.pack()
+
+
+def _preparer_ecran_session():
+    """Peuple les éléments statiques de l'écran Session (régime, apps
+    surveillées, heure de début/fin) — appelé une fois au lancement/reprise
+    d'une session, avant montrer_ecran(ecran_session)."""
+    regime_labels = {
+        "libre": "LIBRE", "pomodoro": "POMODORO", "infini": "INFINI",
+        "quarantaine": "QUARANTAINE", "normale": "SESSION",
+    }
+    apps = session_cfg.get("whitelist_apps", []) or []
+    nom_regime = regime_labels.get(session_cfg.get("regime") or session_type, "SESSION")
+    lbl_session_focus_top.configure(
+        text=f"FOCUS · {nom_regime} · APPS SURVEILLÉES : {len(apps)}")
+
+    maintenant = datetime.now()
+    session_cfg["heure_debut"] = maintenant.strftime("%H:%M")
+    debut_txt = f"DÉBUT · {maintenant.strftime('%H:%M')}"
+    duree_min = session_cfg.get("duree_minutes")
+    if duree_min and session_cfg.get("type") not in ("quarantaine",):
+        fin = maintenant + timedelta(minutes=duree_min)
+        lbl_session_debut_fin.configure(text=f"{debut_txt} · FIN · {fin.strftime('%H:%M')}")
+    else:
+        lbl_session_debut_fin.configure(text=debut_txt)
+
+    prenom = _nom_utilisateur_local() or "Toi"
+    lbl_session_attribution.configure(
+        text=f"— {prenom.upper()} · {maintenant.strftime('%d·%m·%Y · %H:%M')}")
+
+    for w in _session_chips.winfo_children():
+        w.destroy()
+    for app_nom in apps[:8]:
+        ctk.CTkLabel(_session_chips, text=f"◇ {app_nom}", font=theme_sumi.mono(10),
+                     text_color="#B8AF9E", fg_color="transparent",
+                     corner_radius=0, padx=10, pady=6,
+                     ).pack(side="left", padx=(0, 10))
+
+    _rafraichir_barre_session_bas()
+
+
+def _rafraichir_barre_session_bas():
+    """Met à jour le compteur de distractions bloquées + temps focus (barre du
+    bas) — appelé après chaque scan de surveillance, ne modifie aucune logique
+    de session, uniquement l'affichage."""
+    try:
+        lbl_session_bas_gauche.configure(
+            text=f"◤ Distractions bloquées : {nb_soft_corrections} · "
+                 f"Temps focus : {formater_duree(secondes_focus / 60)}")
+    except Exception:
+        pass
 
 # =====================================================================
 #           ÉCRAN TYPE DE SESSION — 4 régimes (fidèle au mockup)
@@ -4955,7 +5346,7 @@ for _idx, (_reg, _ico, _titre, _tag, _desc, _pts, _mode, _typ) in enumerate(_TS_
         _badge = ctk.CTkLabel(_card, text="HARDCORE", font=theme_sumi.mono(9),
                               fg_color="#0A0908", text_color="#E63946",
                               corner_radius=0)
-        _badge.place(relx=1.0, x=-1, y=1, anchor="ne")
+        _badge.place(relx=1.0, x=-1, y=-1, anchor="ne")
 
     _pad = ctk.CTkFrame(_card, fg_color="transparent")
     _pad.pack(fill="both", expand=True, padx=20, pady=22)
@@ -5073,7 +5464,10 @@ def _ts_appliquer_et_continuer():
         session_cfg["nb_jours"] = max(1, int(_ts_jours_var.get()))
     except ValueError:
         session_cfg["nb_jours"] = 1
-    slide_vers(ecran_contrat, ecran_type_session)
+    if session_cfg["hardcore"]:
+        ouvrir_confirmation()
+    else:
+        slide_vers(ecran_contrat, ecran_type_session)
 
 
 def _ts_continuer():
@@ -5470,7 +5864,7 @@ _SITES_PRESETS = _SITES_PRESETS_CLEAN
 _wl_site_vars    = {}   # domain → BooleanVar
 _wl_custom_sites = []   # domaines ajoutés manuellement
 _wl_logo_cache   = {}   # domain → CTkImage (cache en mémoire)
-_WL_LOGO_DIR     = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".logo_cache")
+_WL_LOGO_DIR     = _data_path(".logo_cache")
 os.makedirs(_WL_LOGO_DIR, exist_ok=True)
 
 
@@ -5763,6 +6157,8 @@ def _lancer_session_finale():
     if mode == "libre":
         session_cfg["whitelist_apps"] = list(checkbox_vars.keys())  # tout autoriser
 
+    _preparer_ecran_session()
+
     # Bloquer les sites cochés via le fichier hosts (silencieux si pas admin)
     sites_bloques = session_cfg.get("blocked_sites", [])
     if sites_bloques and mode != "libre":
@@ -5797,6 +6193,173 @@ def _lancer_session_finale():
     # → les gardiens redémarrent même hors ligne.
     if session_cfg.get("hardcore"):
         root.after(800, _hc_activer_effectif if _HC_REPRISE else hc_activer)
+
+
+# =====================================================================
+#     OVERLAY VIOLATION HARDCORE — écran 11 du design (verrouillage négatif)
+#     Habillage visuel plein écran pour la Soft-Correction en session
+#     Hardcore : aucune nouvelle règle métier, la fermeture forcée reste
+#     entièrement pilotée par _surveiller_processus() / soft_correction_*.
+# =====================================================================
+_hc_violation_win = [None]
+
+
+def _hc_temps_restant_secs():
+    """Temps restant avant la fin de la session Hardcore, en secondes.
+    Quarantaine active → échéance dédiée (peut dépasser 24h) ; sinon (reprise
+    Hardcore après redémarrage, qui tourne en type 'libre') → temps_restant."""
+    if quarantaine_active:
+        return max(0, int(quarantaine_fin_ts - time.time()))
+    return max(0, int(temps_restant))
+
+
+def _formater_hms(secs):
+    secs = max(0, int(secs))
+    j, reste = divmod(secs, 86400)
+    h, reste = divmod(reste, 3600)
+    m, s = divmod(reste, 60)
+    if j > 0:
+        return f"{j}j {h:02d}:{m:02d}:{s:02d}"
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
+
+def _construire_violation_hardcore():
+    """Construit (une seule fois, réutilisé ensuite) le Toplevel plein écran
+    rouge de l'écran 11 du design — fond #A82230, sceau 120px, minuteur géant."""
+    win = ctk.CTkToplevel(root)
+    win.overrideredirect(True)
+    win.attributes("-topmost", True)
+    win.configure(fg_color=theme_sumi.HANKO_DEEP)
+    sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
+    win.geometry(f"{sw}x{sh}+0+0")
+
+    # Coin haut-gauche : puce + libellé session
+    coin_hg = ctk.CTkFrame(win, fg_color="transparent")
+    coin_hg.place(x=32, y=24)
+    ctk.CTkFrame(coin_hg, width=8, height=8, fg_color=theme_sumi.PAPER,
+                 corner_radius=0).pack(side="left", pady=2)
+    win._lbl_session = ctk.CTkLabel(coin_hg, text="", font=theme_sumi.mono(10),
+                                     text_color=theme_sumi.PAPER, anchor="w")
+    win._lbl_session.pack(side="left", padx=(10, 0))
+
+    # Coin haut-droit : tentative détectée
+    win._lbl_tentative = ctk.CTkLabel(win, text="", font=theme_sumi.mono(10),
+                                       text_color=theme_sumi.PAPER, anchor="e")
+    win._lbl_tentative.place(relx=1.0, x=-32, y=24, anchor="ne")
+
+    # Accents en L (coin haut-gauche + coin bas-droit)
+    ctk.CTkFrame(win, width=24, height=2, fg_color=theme_sumi.PAPER,
+                 corner_radius=0).place(x=60, y=60)
+    ctk.CTkFrame(win, width=2, height=24, fg_color=theme_sumi.PAPER,
+                 corner_radius=0).place(x=60, y=60)
+    ctk.CTkFrame(win, width=24, height=2, fg_color=theme_sumi.PAPER,
+                 corner_radius=0).place(relx=1.0, rely=1.0, x=-84, y=-62)
+    ctk.CTkFrame(win, width=2, height=24, fg_color=theme_sumi.PAPER,
+                 corner_radius=0).place(relx=1.0, rely=1.0, x=-62, y=-84)
+
+    # Colonne centrale
+    centre = ctk.CTkFrame(win, fg_color="transparent")
+    centre.place(relx=0.5, rely=0.5, anchor="center")
+
+    seal = ctk.CTkFrame(centre, width=120, height=120, corner_radius=60,
+                         fg_color=theme_sumi.PAPER)
+    seal.pack()
+    seal.pack_propagate(False)
+    ctk.CTkLabel(seal, text="禅", font=theme_sumi.serif(64),
+                 text_color=theme_sumi.HANKO_DEEP).place(relx=0.5, rely=0.5, anchor="center")
+
+    ctk.CTkLabel(centre, text="HARDCORE — VERROU EN COURS",
+                 font=theme_sumi.mono(11), text_color=theme_sumi.PAPER
+                 ).pack(pady=(28, 0))
+
+    ligne_titre = ctk.CTkFrame(centre, fg_color="transparent")
+    ligne_titre.pack(pady=(6, 0))
+    ctk.CTkLabel(ligne_titre, text="Reviens dans ", font=theme_sumi.serif(52),
+                 text_color=theme_sumi.PAPER).pack(side="left")
+    win._lbl_minuteur = ctk.CTkLabel(
+        ligne_titre, text="00:00:00",
+        font=(theme_sumi.FONT_SERIF, 52, "underline"),
+        text_color=theme_sumi.PAPER)
+    win._lbl_minuteur.pack(side="left")
+    ctk.CTkLabel(ligne_titre, text=".", font=theme_sumi.serif(52),
+                 text_color=theme_sumi.PAPER).pack(side="left")
+
+    win._lbl_citation = ctk.CTkLabel(
+        centre, text="", font=theme_sumi.serif(18, italic=True),
+        text_color=theme_sumi.PAPER, wraplength=520, justify="center")
+    win._lbl_citation.pack(pady=(14, 0))
+
+    # Ligne de courtoisie (10 s pour fermer soi-même) — conservée en plus du
+    # décompte principal pour ne pas perdre l'info déjà affichée dans
+    # label_statut en dehors du mode Hardcore.
+    win._lbl_grace = ctk.CTkLabel(
+        centre, text="", font=theme_sumi.mono(12), text_color=theme_sumi.PAPER)
+    win._lbl_grace.pack(pady=(10, 0))
+
+    bloc = ctk.CTkFrame(centre, fg_color="transparent", border_width=1,
+                         border_color=theme_sumi.PAPER, corner_radius=0)
+    bloc.pack(pady=(36, 0))
+    ligne_bloc = ctk.CTkFrame(bloc, fg_color="transparent")
+    ligne_bloc.pack(padx=24, pady=16)
+    ctk.CTkLabel(ligne_bloc, text="DÉBLOCAGE D'URGENCE", font=theme_sumi.mono(10),
+                 text_color=theme_sumi.PAPER).pack(side="left")
+    ctk.CTkFrame(ligne_bloc, width=1, height=20,
+                 fg_color=theme_sumi.PAPER).pack(side="left", padx=16)
+    ctk.CTkLabel(ligne_bloc, text="• • • • • •", font=theme_sumi.mono(14),
+                 text_color=theme_sumi.PAPER, fg_color=theme_sumi.HANKO_FIELD,
+                 width=160, corner_radius=0, padx=12, pady=8).pack(side="left")
+    # Cosmétique/informatif uniquement — pas de mécanisme de déblocage réel
+    # (cf. plan de reproduction du design, point de scope #3).
+    ctk.CTkButton(ligne_bloc, text="Débloquer (–20 pts)", font=theme_sumi.ui(12, "bold"),
+                  fg_color=theme_sumi.PAPER, hover_color=theme_sumi.PAPER,
+                  text_color=theme_sumi.HANKO_DEEP, corner_radius=0, width=150,
+                  command=lambda: None).pack(side="left", padx=(16, 0))
+
+    ctk.CTkLabel(centre, text="3 TENTATIVES INCORRECTES → PÉNALITÉ SUPPLÉMENTAIRE",
+                 font=theme_sumi.mono(10), text_color=theme_sumi.PAPER
+                 ).pack(pady=(12, 0))
+
+    win.withdraw()
+    return win
+
+
+def _afficher_violation_hardcore(app_nom, countdown):
+    """Affiche/actualise l'overlay plein écran de violation Hardcore (écran 11) :
+    habillage visuel uniquement, appelé depuis _surveiller_processus() sans
+    modifier la logique de Soft-Correction existante."""
+    win = _hc_violation_win[0]
+    if win is None or not win.winfo_exists():
+        win = _construire_violation_hardcore()
+        _hc_violation_win[0] = win
+
+    num_session = session_cfg.get("num_session", 1)
+    win._lbl_session.configure(text=f"BEFREE · HARDCORE · VERROU · SESSION #{num_session}")
+    win._lbl_tentative.configure(
+        text=f"TENTATIVE : {app_nom.upper()}.EXE · {datetime.now().strftime('%H:%M')}")
+    win._lbl_minuteur.configure(text=_formater_hms(_hc_temps_restant_secs()))
+
+    objectif = (session_cfg.get("objectif") or "").strip()
+    if objectif:
+        court = objectif[:100] + ("…" if len(objectif) > 100 else "")
+        prenom = _nom_utilisateur_local() or "Toi"
+        heure_debut = session_cfg.get("heure_debut", "")
+        win._lbl_citation.configure(text=f"« {court} » — {prenom}, {heure_debut}")
+    else:
+        win._lbl_citation.configure(text="")
+
+    win._lbl_grace.configure(
+        text=f"{app_nom} — ferme-le toi-même dans {countdown}s, sinon fermeture forcée.")
+
+    win.deiconify()
+    win.lift()
+    win.attributes("-topmost", True)
+
+
+def _fermer_violation_hardcore():
+    """Cache l'overlay de violation Hardcore (réutilisé, jamais détruit)."""
+    win = _hc_violation_win[0]
+    if win is not None and win.winfo_exists():
+        win.withdraw()
 
 
 # =====================================================================

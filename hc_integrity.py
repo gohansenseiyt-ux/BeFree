@@ -3,8 +3,8 @@ hc_integrity.py — Signature HMAC de l'état Mode Hardcore.
 
 Empêche de désactiver le Mode Hardcore en éditant hardcore_state.json à la main :
 le secret vit dans le trousseau Windows (Credential Manager), pas en clair dans
-le dossier de l'app. Utilisé à la fois par main.py (écriture) et watchdog.py
-(vérification, dans un process séparé).
+le dossier de l'app. Utilisé par main.py aussi bien en écriture (session normale)
+qu'en vérification (rôle --watchdog-role, le même exécutable relancé comme gardien).
 """
 import hashlib
 import hmac

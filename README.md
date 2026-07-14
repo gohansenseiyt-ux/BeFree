@@ -76,8 +76,8 @@ python main.py
 | `chart_renderer.py` | Rendu des graphiques (matplotlib). |
 | `stats_manager.py` | Gestion des sessions et agrégats statistiques. |
 | `hc_integrity.py` | Signature d'intégrité de l'état Hardcore (anti-triche). |
-| `watchdog.py` | Gardien qui relance l'app pendant une session Hardcore. |
 | `fonts/` | Polices embarquées (Cormorant Garamond, JetBrains Mono). |
+| `icons/` | Icône de l'application (`befree.ico`). |
 
 Les fichiers de données locales (`config.json`, `stats.json`, etc.) sont générés au premier lancement et **ne sont pas versionnés**.
 

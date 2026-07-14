@@ -17,10 +17,11 @@ class StatsDashboard:
     """Dashboard stats — graphique 100%, français intégral."""
 
     DEFAULT_COLORS = {
-        "bg": "#0A0908", "bg_panel": "#141210", "border_dark": "#2A2622",
-        "crimson": "#A82230", "secondary": "#1F1B18",
-        "text": "#E8DFCE", "text_dim": "#8A8071", "text_muted": "#8A8071",
-        "border_lt": "#3A352E",
+        "bg": theme_sumi.SUMI, "bg_panel": theme_sumi.SUMI_2,
+        "border_dark": theme_sumi.RULE, "crimson": theme_sumi.HANKO_DEEP,
+        "secondary": theme_sumi.SURFACE, "text": theme_sumi.INK,
+        "text_dim": theme_sumi.MUTED, "text_muted": theme_sumi.MUTED,
+        "border_lt": theme_sumi.RULE_LIGHT,
     }
 
     SEGMENT_LABELS = {"jour": "Jour", "semaine": "Semaine", "mois": "Mois", "total": "Total"}
@@ -74,7 +75,7 @@ class StatsDashboard:
                 segmente, text=self.SEGMENT_LABELS[nom_filtre],
                 font=theme_sumi.mono(11), fg_color="transparent",
                 border_width=0,
-                hover_color="#2A2622", text_color=c["text_dim"],
+                hover_color=c["border_dark"], text_color=c["text_dim"],
                 corner_radius=0, height=30, width=90,
                 command=lambda n=nom_filtre: self.update_dashboard(n),
             )
@@ -88,7 +89,7 @@ class StatsDashboard:
             width=130, height=30,
             fg_color="transparent", border_width=1,
             border_color=c["border_dark"],
-            hover_color="#2A2622", text_color=c["text_dim"],
+            hover_color=c["border_dark"], text_color=c["text_dim"],
             corner_radius=0,
             command=self._toggle_sort,
         )
