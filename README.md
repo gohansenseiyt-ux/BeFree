@@ -30,14 +30,18 @@ L'interface suit une direction visuelle **« Sumi »** (encre de nuit, dojo/kend
 ## 🖥️ Prérequis
 
 - **Windows 10 / 11** (l'app utilise des API Windows : `pywin32`, `ctypes`).
-- **Python 3.11+**
 - Certaines fonctions (blocage de sites, mode Hardcore) nécessitent de lancer l'app **en administrateur**.
 
 ---
 
 ## 🚀 Installation
 
-### Option 1 — Double-clic (le plus simple)
+### Option 1 — Télécharger le .exe (le plus simple)
+
+1. Va sur la page [Releases](https://github.com/gohansenseiyt-ux/BeFree/releases/latest) et télécharge **`BeFree.exe`**.
+2. Double-clique dessus — aucune installation de Python ni de dépendance requise, ça se lance comme une appli normale.
+
+### Option 2 — Depuis les sources (double-clic)
 
 1. Installe [Python](https://www.python.org/downloads/) si ce n'est pas déjà fait (coche **"Add python.exe to PATH"** pendant l'installation).
 2. Clone ou télécharge ce dépôt.
@@ -45,7 +49,7 @@ L'interface suit une direction visuelle **« Sumi »** (encre de nuit, dojo/kend
 
 Un écran de chargement vérifie automatiquement les dépendances et installe celles qui manquent (via pip), puis lance l'application — comme une appli normale, sans étape manuelle. Les lancements suivants sont quasi instantanés (tout est déjà installé).
 
-### Option 2 — Ligne de commande
+### Option 3 — Ligne de commande
 
 ```bash
 # 1. Cloner le dépôt
