@@ -10,11 +10,10 @@ L'interface suit une direction visuelle **« Sumi »** (encre de nuit, dojo/kend
 
 ## ✨ Fonctionnalités
 
-- **4 régimes de session**
-  - **Libre** — une durée, du tracking, aucun blocage.
-  - **Pomodoro** — cycles de 25 min focus / 5 min pause.
-  - **Infini** — le chronomètre monte au lieu de descendre.
-  - **Quarantaine (Hardcore)** — blocage irrévocable, multi-jours, `.exe` en quarantaine.
+- **Assistant de session en 2 étapes** — d'abord le **mode** (à quel point tu t'interdis d'abandonner), puis le **type** (comment le temps est compté), filtré selon le mode choisi :
+  - **Libre** — aucune protection contre toi-même, juste un chrono. Types : Infini, Pomodoro.
+  - **Tunnel** — abandon impossible sans passer par le Tunnel de la Honte. Types : Pomodoro, Durée Fixe.
+  - **Hardcore** — verrouillage total, ni pause ni annulation. Types : Quarantaine (`.exe` distrayants déplacés sur le disque), Pomodoro, Durée Fixe.
 - **Contrat de travail** — tu écris ton objectif et tu signes avant de commencer.
 - **Liste blanche d'applications** et **blocage de sites web** (via le fichier `hosts`).
 - **Système de grades** (Deep Work Score) — 6 rangs du dojo, de *Novice* à *BeFree*.
@@ -80,6 +79,7 @@ python main.py
 | `chart_renderer.py` | Rendu des graphiques (matplotlib). |
 | `stats_manager.py` | Gestion des sessions et agrégats statistiques. |
 | `hc_integrity.py` | Signature d'intégrité de l'état Hardcore (anti-triche). |
+| `app_paths.py` | Détection du dossier de données persistantes (partagé entre les modules). |
 | `fonts/` | Polices embarquées (Cormorant Garamond, JetBrains Mono). |
 | `icons/` | Icône de l'application (`befree.ico`). |
 

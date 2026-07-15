@@ -4238,7 +4238,7 @@ ctk.CTkLabel(_wordmark_row, text="BeFree", font=theme_sumi.serif(22),
 ctk.CTkLabel(_wordmark_row, text=".", font=theme_sumi.serif(22),
              text_color="#E63946").pack(side="left")
 
-ctk.CTkLabel(logo_frame, text="v3.0 — HARDCORE", font=theme_sumi.mono(8),
+ctk.CTkLabel(logo_frame, text="v3.2 — HARDCORE", font=theme_sumi.mono(8),
              text_color="#8A8071").pack(pady=(2, 0))
 
 # ── Sections de navigation (icônes trait fin dessinées au runtime, fidèle au design) ──
@@ -4828,7 +4828,7 @@ btn_reinitialiser = ctk.CTkButton(
 btn_reinitialiser.pack()
 
 # Version info
-v_info = ctk.CTkLabel(conteneur_param, text="BeFree v3.0 — HARDCORE",
+v_info = ctk.CTkLabel(conteneur_param, text="BeFree v3.2 — HARDCORE",
                         font=theme_sumi.mono(9), text_color="#5C574C")
 v_info.pack(pady=(24, 0))
 
