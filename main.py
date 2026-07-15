@@ -20,24 +20,13 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders as email_encoders
 
-import customtkinter as ctk
+# psutil/hc_integrity seuls sont nécessaires au rôle --watchdog-role ci-dessous
+# (simple surveillance de PID) — le reste de la pile GUI (customtkinter, PIL,
+# pystray, matplotlib via ui_elements...) est importé plus bas, après la
+# sortie anticipée de ce rôle, pour ne pas payer ce coût à chaque relance
+# minute-par-minute du gardien pendant une session Hardcore.
 import psutil
-import pystray
-from PIL import Image, ImageDraw
-from plyer import notification as plyer_notification
-from tkinter import filedialog, messagebox
-import tkinter as tk
-import win32com.client
-import win32gui
-import win32con
-
-from stats_manager import (sauvegarder_session,
-                           StatsManager, formater_duree)
-from ui_elements import StatsDashboard
 import hc_integrity
-import theme_sumi
-
-theme_sumi.register_fonts()
 
 
 # =====================================================================
@@ -54,8 +43,7 @@ theme_sumi.register_fonts()
 # suivant. DATA_DIR pointe donc vers le dossier du .exe lui-même une fois
 # empaqueté, ou vers le dossier du script en mode source (comportement
 # inchangé pour les développeurs).
-def _frozen() -> bool:
-    return getattr(sys, "frozen", False)
+from app_paths import frozen as _frozen, DATA_DIR, data_path as _data_path
 
 
 def _app_identity_path() -> str:
@@ -64,19 +52,20 @@ def _app_identity_path() -> str:
     return sys.executable if _frozen() else os.path.abspath(__file__)
 
 
-DATA_DIR = os.path.dirname(sys.executable) if _frozen() else os.path.dirname(os.path.abspath(__file__))
-
-
-def _data_path(*parts) -> str:
-    return os.path.join(DATA_DIR, *parts)
-
-
 def _cmd_relancer(*extra_args) -> list:
     """Commande pour relancer cette app (empaquetée ou depuis les sources),
     avec des arguments additionnels (ex. --reprendre-hardcore, --watchdog-role)."""
     if _frozen():
         return [sys.executable, *extra_args]
     return [sys.executable, os.path.abspath(__file__), *extra_args]
+
+
+# Clé de démarrage Windows utilisée par le Mode Hardcore — définie ici (avant
+# le rôle watchdog ci-dessous) pour que les deux endroits qui la lisent/écrivent
+# (ce rôle watchdog, et la section Mode Hardcore plus bas) partagent la même
+# constante au lieu de deux copies qui pourraient diverger.
+_HC_REG_KEY     = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_HC_REG_VALUE   = "*BeFreeHardcore"   # préfixe '*' = Windows l'exécute aussi en Mode sans échec
 
 
 # ── Rôle watchdog : ce même exécutable, invoqué avec --watchdog-role, se
@@ -90,10 +79,9 @@ if "--watchdog-role" in sys.argv:
 
     def _wd_cle_hardcore_existe() -> bool:
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                  r"Software\Microsoft\Windows\CurrentVersion\Run",
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, _HC_REG_KEY,
                                   0, winreg.KEY_QUERY_VALUE)
-            winreg.QueryValueEx(key, "*BeFreeHardcore")
+            winreg.QueryValueEx(key, _HC_REG_VALUE)
             winreg.CloseKey(key)
             return True
         except OSError:
@@ -149,7 +137,7 @@ if "--watchdog-role" in sys.argv:
         etat = None
         if os.path.exists(hc_file):
             try:
-                with open(hc_file) as f:
+                with open(hc_file, encoding="utf-8") as f:
                     etat = json.load(f)
             except Exception:
                 etat = None
@@ -175,7 +163,7 @@ if "--watchdog-role" in sys.argv:
         session_file = os.path.join(dir_app, "session_en_cours.json")
         if os.path.exists(session_file):
             try:
-                with open(session_file) as f:
+                with open(session_file, encoding="utf-8") as f:
                     etat = json.load(f)
                 if etat.get("mode") == "libre":
                     subprocess.Popen(
@@ -211,6 +199,26 @@ if "--watchdog-role" in sys.argv:
 
     _watchdog_role_main()
     sys.exit(0)
+
+
+# À partir d'ici : lancement réel de l'application (fenêtre, GUI) — le rôle
+# watchdog ci-dessus est toujours sorti (sys.exit) avant d'atteindre ce point.
+import customtkinter as ctk
+import pystray
+from PIL import Image, ImageDraw
+from plyer import notification as plyer_notification
+from tkinter import filedialog, messagebox
+import tkinter as tk
+import win32com.client
+import win32gui
+import win32con
+
+from stats_manager import (sauvegarder_session,
+                           StatsManager, formater_duree)
+from ui_elements import StatsDashboard
+import theme_sumi
+
+theme_sumi.register_fonts()
 
 
 def _nom_utilisateur_local() -> str:
@@ -273,6 +281,15 @@ DOSSIER_QUARANTAINE = _data_path("Quarantaine")
 ALWAYS_ALLOWED = {"Code.exe", "WindowsTerminal.exe", "cmd.exe", "powershell.exe",
                   "bash.exe", "WT.exe", "explorer.exe", "Explorer.EXE",
                   "Taskmgr.exe", "taskmgr.exe"}
+
+# BeFree ne doit jamais se détecter/fermer lui-même. Empaqueté (--onefile), le
+# process s'appelle BeFree.exe et Windows en lance 2 (bootloader + enfant) —
+# exclure par PID seul ne couvrirait que l'un des deux, donc exclusion par nom
+# une fois frozen. En dev, le process est python.exe/pythonw.exe (nom trop
+# générique pour être exclu sans risque) → exclusion par PID uniquement,
+# suffisant puisqu'il n'y a alors qu'un seul process.
+_OWN_PID = os.getpid()
+_OWN_PROCESS_NAME = "BeFree.exe" if _frozen() else None
 
 # ── Deep Work Score — table des grades (rangs du dojo) ──
 # Chaque entrée : (points_minimum, nom_affiché, kanji, couleur_hex)
@@ -859,7 +876,7 @@ def basculer_mode_infini():
 # --- NAVIGATION ---
 def montrer_ecran(ecran):
     for e in (ecran_accueil, ecran_stats, ecran_parametres, ecran_temps, ecran_apps,
-              ecran_session, ecran_contrat, ecran_type_session,
+              ecran_session, ecran_contrat, ecran_type_mode, ecran_type_session,
               ecran_whitelist_nouveau, ecran_whitelist_sites, ecran_verrouillage):
         try:
             e.pack_forget()
@@ -915,8 +932,8 @@ def naviguer_sidebar(page):
         rafraichir_accueil()
         montrer_ecran(ecran_accueil)
     elif page == "demarrer":
-        _ts_reset()
-        montrer_ecran(ecran_type_session)
+        _ts_reset_mode()
+        montrer_ecran(ecran_type_mode)
     elif page == "stats":
         montrer_ecran(ecran_stats)
     elif page == "parametres":
@@ -1024,12 +1041,17 @@ def ouvrir_confirmation():
         contenu, text="ni pause, ni annulation.",
         font=theme_sumi.ui(12, "bold"), text_color=theme_sumi.HANKO,
         justify="center").pack()
+    _conf_type = session_cfg.get("type")
+    if _conf_type == "quarantaine":
+        _conf_phrase2 = "Les .exe distraction seront mis en quarantaine."
+    else:
+        _conf_phrase2 = "L'application reste verrouillée jusqu'à la fin."
     ctk.CTkLabel(
-        contenu, text="Les .exe distraction seront mis en quarantaine.",
+        contenu, text=_conf_phrase2,
         font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
         wraplength=440, justify="center").pack(pady=(2, 0))
 
-    # Bloc infos : durée verrouillée + récompense (dynamiques, session_cfg/_TS_REGIMES)
+    # Bloc infos : durée verrouillée + récompense (dynamiques, session_cfg/_TS_TYPES)
     bloc = ctk.CTkFrame(contenu, fg_color=theme_sumi.SURFACE, corner_radius=0,
                          border_width=1, border_color=theme_sumi.RULE)
     bloc.pack(fill="x", pady=(20, 0))
@@ -1037,15 +1059,23 @@ def ouvrir_confirmation():
     bloc_inner.pack(fill="x", padx=16, pady=14)
 
     nb_jours = session_cfg.get("nb_jours", 1)
+    if _conf_type == "quarantaine":
+        _conf_duree_txt = f"{nb_jours}j 00:00:00"
+    elif _conf_type == "pomodoro":
+        _conf_total_min = session_cfg.get("nb_cycles", 4) * (POMODORO_FOCUS_SECS + POMODORO_BREAK_SECS) // 60
+        _conf_h, _conf_m = divmod(_conf_total_min, 60)
+        _conf_duree_txt = f"{_conf_h:02d}:{_conf_m:02d}:00"
+    else:  # fixe
+        _conf_h, _conf_m = divmod(session_cfg.get("duree_minutes", 90), 60)
+        _conf_duree_txt = f"{_conf_h:02d}:{_conf_m:02d}:00"
     ligne_duree = ctk.CTkFrame(bloc_inner, fg_color="transparent")
     ligne_duree.pack(fill="x")
     ctk.CTkLabel(ligne_duree, text="DURÉE VERROUILLÉE", font=theme_sumi.mono(10),
                  text_color=theme_sumi.MUTED, anchor="w").pack(side="left")
-    ctk.CTkLabel(ligne_duree, text=f"{nb_jours}j 00:00:00", font=theme_sumi.mono(20),
+    ctk.CTkLabel(ligne_duree, text=_conf_duree_txt, font=theme_sumi.mono(20),
                  text_color=theme_sumi.INK, anchor="e").pack(side="right")
 
-    pts_txt = next((r[5] for r in _TS_REGIMES if r[0] == "quarantaine"),
-                    "+10 PTS / JOUR TENU")
+    pts_txt = _TS_TYPES.get(_conf_type, _TS_TYPES["quarantaine"])[4]
     ligne_recomp = ctk.CTkFrame(bloc_inner, fg_color="transparent")
     ligne_recomp.pack(fill="x", pady=(8, 0))
     ctk.CTkLabel(ligne_recomp, text="RÉCOMPENSE SI TENU", font=theme_sumi.mono(10),
@@ -1125,7 +1155,12 @@ _SW_REG_VALUE = "*BeFreeSession"   # préfixe '*' = Windows l'exécute aussi en 
 
 
 def _session_watchdog_activer():
-    """Lance le watchdog léger et la clé registre dès qu'une session démarre."""
+    """Lance le watchdog léger et la clé registre dès qu'une session démarre.
+    Ignoré en session Hardcore : _hc_activer_effectif() installe son propre
+    watchdog lourd (registre + tâche planifiée + 2 gardiens détachés) et les
+    deux systèmes ne doivent jamais tourner simultanément pour la même session."""
+    if session_cfg.get("hardcore"):
+        return
     global _SW_PROC
     # Clé registre → relance au redémarrage du PC
     try:
@@ -1179,8 +1214,7 @@ _HC_REPRISE          = False   # True si la session a été reprise après un ki
 
 _HC_STATE_FILE  = _data_path("hardcore_state.json")
 _HC_LOCK_FILE   = _data_path("relaunch.lock")
-_HC_REG_KEY     = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_HC_REG_VALUE   = "*BeFreeHardcore"   # préfixe '*' = Windows l'exécute aussi en Mode sans échec
+# _HC_REG_KEY / _HC_REG_VALUE sont définies plus haut, avant le rôle --watchdog-role.
 
 
 # ── Persistance ──────────────────────────────────────────────────────
@@ -1602,6 +1636,8 @@ def _surveiller_processus():
         try:
             nom_proc = proc.info["name"]
         except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if proc.info.get("pid") == _OWN_PID or nom_proc == _OWN_PROCESS_NAME:
             continue
         if nom_proc in ALWAYS_ALLOWED:
             continue
@@ -2281,7 +2317,6 @@ def demarrer_pomodoro():
     ensure_taskbar_visible()
     _session_verrouiller_fenetre()
     sauvegarder_etat()
-    _session_watchdog_activer()
     root.after(1000, tick_pomodoro)
 
 def tick_pomodoro():
@@ -2362,6 +2397,9 @@ def _tick_pomodoro_corps():
 def terminer_pomodoro():
     """Termine manuellement une session pomodoro."""
     global timer_active, paused
+    if session_cfg.get("hardcore"):
+        _bloquer_sortie_hardcore()
+        return
     timer_active = False
     paused = False
     _session_deverrouiller_fenetre()
@@ -2436,7 +2474,6 @@ def demarrer_infini():
     ensure_taskbar_visible()
     _session_verrouiller_fenetre()
     sauvegarder_etat()
-    _session_watchdog_activer()
     root.after(1000, tick_infini)
 
 # =====================================================================
@@ -2480,6 +2517,7 @@ def _config_sortie_session():
     if mode == "hardcore":
         try:
             btn_abandonner.pack_forget()
+            btn_terminer_infini.pack_forget()
         except Exception:
             pass
         root.bind("<Alt-F4>", _bloquer_sortie_hardcore)
@@ -2588,7 +2626,6 @@ def demarrer():
     ensure_taskbar_visible()
     _session_verrouiller_fenetre()
     sauvegarder_etat()
-    _session_watchdog_activer()
     root.after(1000, tick)
 
 # =====================================================================
@@ -2739,6 +2776,13 @@ def restaurer_session(etat):
 
     # Restaurer le mode dans session_cfg pour que on_fermeture() le connaisse
     session_cfg["mode"] = etat.get("mode", "tunnel")
+    # Restaurer aussi type + whitelist_apps, sinon _preparer_ecran_session()
+    # affiche un libellé générique et "0 apps surveillées" (session_type et
+    # apps_a_bloquer sont déjà disponibles à ce point, pas besoin d'attendre
+    # la boucle de restauration des checkboxes plus bas).
+    session_cfg["type"] = {"pomodoro": "pomodoro", "infini": "infini",
+                            "normale": "fixe"}.get(session_type, "fixe")
+    session_cfg["whitelist_apps"] = [nom for nom in checkbox_vars if nom not in apps_a_bloquer]
     _preparer_ecran_session()
 
     # Durée pendant laquelle le PC était éteint (affiché dans le popup)
@@ -3361,7 +3405,7 @@ def slide_vers(ecran_suivant, ecran_courant=None):
     _SLIDE_EN_COURS = True
 
     tous = (ecran_accueil, ecran_stats, ecran_parametres, ecran_temps, ecran_apps,
-            ecran_session, ecran_contrat, ecran_type_session,
+            ecran_session, ecran_contrat, ecran_type_mode, ecran_type_session,
             ecran_whitelist_nouveau, ecran_whitelist_sites, ecran_verrouillage)
 
     for e in tous:
@@ -4372,7 +4416,7 @@ btn_preparer = ctk.CTkButton(
     text_color="#0A0908",
     corner_radius=3,
     height=46,
-    command=lambda: (_ts_reset(), slide_vers(ecran_type_session, ecran_accueil)),
+    command=lambda: (_ts_reset_mode(), slide_vers(ecran_type_mode, ecran_accueil)),
 )
 btn_preparer.pack(side="left")
 
@@ -4441,7 +4485,8 @@ def rafraichir_accueil():
     }) if toutes else 0
     nb_sessions_reel = sum(
         1 for s in toutes
-        if datetime.fromisoformat(s["timestamp"]).date() >= (now - timedelta(days=now.weekday())).date()
+        if not s.get("abandon")
+        and datetime.fromisoformat(s["timestamp"]).date() >= (now - timedelta(days=now.weekday())).date()
     )
     serie = stats_manager.get_winstreak()
 
@@ -4505,7 +4550,7 @@ def rafraichir_accueil():
 # ======================= ÉCRAN 2 — STATS =======================
 ecran_stats = ctk.CTkFrame(content_frame, fg_color="transparent")
 
-stats_manager = StatsManager(STATS_FILE)
+stats_manager = StatsManager()
 stats_dashboard = StatsDashboard(ecran_stats, stats_manager,
                                   on_export=lambda: exporter_statistiques())
 
@@ -5214,12 +5259,16 @@ def _preparer_ecran_session():
     """Peuple les éléments statiques de l'écran Session (régime, apps
     surveillées, heure de début/fin) — appelé une fois au lancement/reprise
     d'une session, avant montrer_ecran(ecran_session)."""
-    regime_labels = {
-        "libre": "LIBRE", "pomodoro": "POMODORO", "infini": "INFINI",
-        "quarantaine": "QUARANTAINE", "normale": "SESSION",
-    }
+    _mode_labels = {"libre": "LIBRE", "tunnel": "TUNNEL", "hardcore": "HARDCORE"}
+    _type_labels = {"infini": "INFINI", "pomodoro": "POMODORO", "fixe": "FIXE",
+                     "quarantaine": "QUARANTAINE"}
     apps = session_cfg.get("whitelist_apps", []) or []
-    nom_regime = regime_labels.get(session_cfg.get("regime") or session_type, "SESSION")
+    _mode = session_cfg.get("mode")
+    _typ = session_cfg.get("type")
+    if _mode and _typ:
+        nom_regime = f"{_mode_labels.get(_mode, _mode.upper())} · {_type_labels.get(_typ, _typ.upper())}"
+    else:
+        nom_regime = "SESSION"
     lbl_session_focus_top.configure(
         text=f"FOCUS · {nom_regime} · APPS SURVEILLÉES : {len(apps)}")
 
@@ -5262,12 +5311,203 @@ def _rafraichir_barre_session_bas():
 # =====================================================================
 #           ÉCRAN TYPE DE SESSION — 4 régimes (fidèle au mockup)
 # =====================================================================
+ecran_type_mode = ctk.CTkFrame(content_frame, fg_color="#0A0908")
+
+_tm_inner = ctk.CTkFrame(ecran_type_mode, fg_color="transparent")
+_tm_inner.pack(fill="both", expand=True, padx=60, pady=(40, 30))
+
+# ── En-tête : étape + barre de progression (3/4) ──
+ctk.CTkLabel(_tm_inner, text="ÉTAPE 3 / 4 — MODE", font=theme_sumi.mono(10),
+             text_color="#8A8071", anchor="w").pack(fill="x")
+_tm_progress_bg = ctk.CTkFrame(_tm_inner, height=2, fg_color="#1F1B18", corner_radius=0)
+_tm_progress_bg.pack(fill="x", pady=(10, 0))
+_tm_progress_bg.pack_propagate(False)
+ctk.CTkFrame(_tm_progress_bg, height=2, fg_color="#E8DFCE", corner_radius=0).place(
+    relx=0, rely=0, relwidth=0.75, relheight=1)
+
+# ── Titre centré ──
+ctk.CTkLabel(_tm_inner, text="Quel mode, aujourd'hui ?",
+             font=theme_sumi.serif(32), text_color="#E8DFCE").pack(pady=(24, 0))
+ctk.CTkLabel(_tm_inner, text="Le mode fixe le niveau de protection contre toi-même.",
+             font=("Segoe UI", 13), text_color="#B8AF9E").pack(pady=(2, 0))
+
+_ts_mode_var = [None]     # "libre" | "tunnel" | "hardcore"
+_ts_mode_refs = {}        # mode → {"card":..., "sel_badge":...}
+
+_tm_cartes_zone = ctk.CTkFrame(_tm_inner, fg_color="transparent")
+_tm_cartes_zone.pack(fill="x", pady=(32, 0))
+for _i in range(3):
+    _tm_cartes_zone.grid_columnconfigure(_i, weight=1, uniform="mode")
+
+# (mode, icône texte ou None [icône dessinée], titre, tag, description)
+_TS_MODES = [
+    ("libre", "◇", "Libre", "FLOW · SIMPLE",
+     "Aucune protection contre toi-même. Juste un chrono."),
+    ("tunnel", None, "Tunnel", "PROTECTION INTERMÉDIAIRE",
+     "Impossible d'abandonner sans passer par le Tunnel de la Honte."),
+    ("hardcore", "禅", "Hardcore", "IRRÉVOCABLE",
+     "Verrouillage total. Ni pause, ni annulation, quel que soit le type choisi ensuite."),
+]
+
+
+def _ts_selectionner_mode(mode):
+    _ts_mode_var[0] = mode
+    for m, refs in _ts_mode_refs.items():
+        is_hc = (m == "hardcore")
+        selected = (m == mode)
+        if is_hc:
+            refs["card"].configure(border_width=1, border_color="#E63946")
+        else:
+            refs["card"].configure(border_width=2 if selected else 1,
+                                    border_color="#E63946" if selected else "#2A2622")
+        if refs["sel_badge"] is not None:
+            if selected:
+                if is_hc:
+                    refs["sel_badge"].place(relx=0.0, x=1, y=-1, anchor="nw")
+                else:
+                    refs["sel_badge"].place(relx=1.0, x=-1, y=-1, anchor="ne")
+            else:
+                refs["sel_badge"].place_forget()
+    btn_tm_suivant.configure(state="normal", fg_color="#E8DFCE",
+                              hover_color="#D8CFC0", text_color="#0A0908")
+
+
+def _ts_construire_carte(parent, col, height, pad_pady, desc_font_size,
+                          bg, bd, txt_main, txt_tag, txt_desc,
+                          icone_char, titre, tag, desc, pts, pts_color,
+                          hc_badge, sel_badge_bg, sel_badge_fg, sel_badge_text,
+                          on_click):
+    """Construit une carte sélectionnable (mode à l'étape 1, type à l'étape 2) :
+    cadre, badge HARDCORE permanent optionnel, badge de sélection (masqué par
+    défaut — affiché/caché par l'appelant), icône, titre, tag, description,
+    points optionnels, binding clic sur toute la carte.
+    Retourne (card, sel_badge)."""
+    card = ctk.CTkFrame(parent, fg_color=bg, corner_radius=0,
+                         border_width=1, border_color=bd, height=height)
+    card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 16, 0))
+    card.grid_propagate(False)
+
+    if hc_badge is not None:
+        _hc_bg, _hc_fg = hc_badge
+        ctk.CTkLabel(card, text="HARDCORE", font=theme_sumi.mono(9),
+                     fg_color=_hc_bg, text_color=_hc_fg, corner_radius=0
+                     ).place(relx=1.0, x=-1, y=-1, anchor="ne")
+
+    sel_badge = ctk.CTkLabel(card, text=sel_badge_text, font=theme_sumi.mono(9),
+                              fg_color=sel_badge_bg, text_color=sel_badge_fg,
+                              corner_radius=0)
+    # placé/affiché uniquement pour la carte sélectionnée (voir l'appelant)
+
+    pad = ctk.CTkFrame(card, fg_color="transparent")
+    pad.pack(fill="both", expand=True, padx=20, pady=pad_pady)
+
+    ico_box = ctk.CTkFrame(pad, width=36, height=36, corner_radius=0,
+                            fg_color="transparent", border_width=1, border_color=txt_main)
+    ico_box.pack(anchor="w")
+    ico_box.pack_propagate(False)
+    if icone_char is not None:
+        ctk.CTkLabel(ico_box, text=icone_char, font=theme_sumi.serif(18),
+                     text_color=txt_main).place(relx=0.5, rely=0.5, anchor="center")
+    else:
+        _tunnel_img = theme_sumi.tunnel_icon(txt_main)
+        _lbl_tunnel = ctk.CTkLabel(ico_box, image=_tunnel_img, text="")
+        _lbl_tunnel.image = _tunnel_img
+        _lbl_tunnel.place(relx=0.5, rely=0.5, anchor="center")
+
+    ctk.CTkLabel(pad, text=titre, font=theme_sumi.serif(22),
+                 text_color=txt_main, anchor="w").pack(fill="x", pady=(14, 0))
+    ctk.CTkLabel(pad, text=tag, font=theme_sumi.mono(9),
+                 text_color=txt_tag, anchor="w").pack(fill="x", pady=(2, 0))
+    ctk.CTkLabel(pad, text=desc, font=("Segoe UI", desc_font_size), justify="left",
+                 text_color=txt_desc, anchor="w", wraplength=220).pack(
+                 fill="x", expand=True, pady=(14, 0), anchor="nw")
+    if pts is not None:
+        ctk.CTkLabel(pad, text=pts, font=theme_sumi.mono(10),
+                     text_color=pts_color, anchor="w").pack(fill="x", pady=(14, 0))
+
+    card.bind("<Button-1>", on_click)
+    card.configure(cursor="hand2")
+    for w in pad.winfo_children():
+        w.bind("<Button-1>", on_click)
+        try:
+            w.configure(cursor="hand2")
+        except Exception:
+            pass
+
+    return card, sel_badge
+
+
+for _idx, (_mode, _ico, _titre, _tag, _desc) in enumerate(_TS_MODES):
+    _is_hc = (_mode == "hardcore")
+
+    def _make_mode_click(m):
+        def _click(e=None):
+            _ts_selectionner_mode(m)
+        return _click
+
+    _card, _sel_badge = _ts_construire_carte(
+        parent=_tm_cartes_zone, col=_idx, height=220, pad_pady=24, desc_font_size=12,
+        bg="#E63946" if _is_hc else "#141210", bd="#E63946" if _is_hc else "#2A2622",
+        txt_main="#0A0908" if _is_hc else "#E8DFCE",
+        txt_tag="#0A0908" if _is_hc else "#8A8071",
+        txt_desc="#0A0908" if _is_hc else "#B8AF9E",
+        icone_char=_ico, titre=_titre, tag=_tag, desc=_desc, pts=None, pts_color=None,
+        hc_badge=("#0A0908", "#E63946") if _is_hc else None,
+        sel_badge_bg="#0A0908" if _is_hc else "#E63946",
+        sel_badge_fg="#E63946" if _is_hc else "#0A0908",
+        sel_badge_text="✓ SÉLECTIONNÉ" if _is_hc else "SÉLECTIONNÉ",
+        on_click=_make_mode_click(_mode))
+    _ts_mode_refs[_mode] = {"card": _card, "sel_badge": _sel_badge}
+
+
+def _ts_reset_mode():
+    """Remet l'étape 1 (mode) à zéro."""
+    _ts_mode_var[0] = None
+    for m, refs in _ts_mode_refs.items():
+        is_hc = (m == "hardcore")
+        refs["card"].configure(border_width=1, border_color="#E63946" if is_hc else "#2A2622")
+        if refs["sel_badge"] is not None:
+            refs["sel_badge"].place_forget()
+    btn_tm_suivant.configure(state="disabled", fg_color="#1F1B18",
+                              hover_color="#1F1B18", text_color="#5C574C")
+
+
+def _ts_continuer_mode():
+    mode = _ts_mode_var[0]
+    if not mode:
+        return
+    session_cfg["mode"] = mode
+    session_cfg["hardcore"] = (mode == "hardcore")
+    _ts_construire_cartes_type(mode)
+    slide_vers(ecran_type_session, ecran_type_mode)
+
+
+_tm_nav = ctk.CTkFrame(_tm_inner, fg_color="transparent")
+_tm_nav.pack(side="bottom", fill="x", pady=(0, 0))
+
+ctk.CTkButton(_tm_nav, text="← Retour", width=130, height=40,
+              font=theme_sumi.ui(12), corner_radius=3,
+              fg_color="transparent", hover_color="#1F1B18",
+              border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
+              command=lambda: slide_vers(ecran_accueil, ecran_type_mode)
+              ).pack(side="left")
+
+btn_tm_suivant = ctk.CTkButton(_tm_nav, text="Suivant   ▶", width=180, height=40,
+                                font=theme_sumi.ui(14, "bold"), corner_radius=3,
+                                fg_color="#1F1B18", hover_color="#1F1B18",
+                                text_color="#5C574C", state="disabled",
+                                command=_ts_continuer_mode)
+btn_tm_suivant.pack(side="right")
+
+# =====================================================================
+#           ÉCRAN TYPE DE SESSION — ÉTAPE 2 : TYPE (filtré selon le mode)
+# =====================================================================
 ecran_type_session = ctk.CTkFrame(content_frame, fg_color="#0A0908")
 
 _ts_inner = ctk.CTkFrame(ecran_type_session, fg_color="transparent")
 _ts_inner.pack(fill="both", expand=True, padx=60, pady=(40, 30))
 
-# ── En-tête : étape + barre de progression ──
+# ── En-tête : étape + barre de progression (toujours pleine, étape 4/4) ──
 ctk.CTkLabel(_ts_inner, text="ÉTAPE 4 / 4 — TYPE", font=theme_sumi.mono(10),
              text_color="#8A8071", anchor="w").pack(fill="x")
 _ts_progress_bg = ctk.CTkFrame(_ts_inner, height=2, fg_color="#1F1B18", corner_radius=0)
@@ -5276,182 +5516,229 @@ _ts_progress_bg.pack_propagate(False)
 ctk.CTkFrame(_ts_progress_bg, height=2, fg_color="#E8DFCE", corner_radius=0).place(
     relx=0, rely=0, relwidth=1.0, relheight=1)
 
-# ── Titre centré ──
-ctk.CTkLabel(_ts_inner, text="Quel régime, aujourd'hui ?",
+# ── Titre centré + sous-titre dynamique (texte/couleur selon le mode) ──
+ctk.CTkLabel(_ts_inner, text="Quel type de session ?",
              font=theme_sumi.serif(32), text_color="#E8DFCE").pack(pady=(24, 0))
-ctk.CTkLabel(_ts_inner, text="Trois régimes ordinaires. Un régime qui ne pardonne pas.",
-             font=("Segoe UI", 13), text_color="#B8AF9E").pack(pady=(2, 0))
+_ts_soustitre = ctk.CTkLabel(_ts_inner, text="", font=("Segoe UI", 13, "italic"),
+                              text_color="#B8AF9E")
+_ts_soustitre.pack(pady=(2, 0))
 
 # ── Variables de session ──
-_ts_regime_var = [None]   # "libre" | "pomodoro" | "infini" | "quarantaine"
+_ts_type_var   = [None]   # "infini" | "pomodoro" | "fixe" | "quarantaine"
 _ts_duree_var  = ctk.StringVar(value="90")
 _ts_cycles_var = ctk.StringVar(value="4")
 _ts_jours_var  = ctk.StringVar(value="1")
-_ts_regime_refs = {}      # régime → (card, is_hardcore)
+_ts_type_refs  = {}       # type → {"card":..., "sel_badge":...}
 
-# (régime, icône, titre, tag, description, points, mode, type)
-_TS_REGIMES = [
-    ("libre",       "◇", "Libre",       "FLOW · SIMPLE",
-     "Une session, une durée. Rien d'autre.",       "+ 1 PT / 30 MIN",  "libre",    "fixe"),
-    ("pomodoro",    "◐", "Pomodoro",    "25 / 5 · CYCLIQUE",
-     "4 cycles de 25 min, 5 min de pause.",         "+ 2 PTS / CYCLE",  "tunnel",   "pomodoro"),
-    ("infini",      "∞", "Infini",      "SANS MINUTEUR",
-     "Le chronomètre monte au lieu de descendre.",  "+ 3 PTS / HEURE",  "tunnel",   "infini"),
-    ("quarantaine", "禅", "Quarantaine", "IRRÉVOCABLE · MULTI-JOURS",
-     ".exe distraction en quarantaine sur disque. Non annulable.",
-     "+ 10 PTS / JOUR TENU", "hardcore", "quarantaine"),
-]
+# (type, icône, titre, tag, description, points)
+_TS_TYPES = {
+    "infini":      ("∞", "Infini",      "SANS MINUTEUR",
+                    "Le chronomètre monte au lieu de descendre.", "+ 3 PTS / HEURE"),
+    "pomodoro":    ("◐", "Pomodoro",    "25 / 5 · CYCLIQUE",
+                    "4 cycles de 25 min, 5 min de pause.", "+ 2 PTS / CYCLE"),
+    "fixe":        ("◇", "Durée Fixe",  "FLOW · SIMPLE",
+                    "Une session, une durée. Rien d'autre.", "+ 1 PT / 30 MIN"),
+    "quarantaine": ("禅", "Quarantaine", "IRRÉVOCABLE · MULTI-JOURS",
+                    ".exe distraction en quarantaine sur disque. Non annulable.",
+                    "+ 10 PTS / JOUR TENU"),
+}
 
-_TS_REGIME_META = {r[0]: {"mode": r[6], "type": r[7]} for r in _TS_REGIMES}
+# mode → types proposés à l'étape 2, dans l'ordre d'affichage
+_TS_MODE_TYPES = {
+    "libre":    ["infini", "pomodoro"],
+    "tunnel":   ["pomodoro", "fixe"],
+    "hardcore": ["quarantaine", "pomodoro", "fixe"],
+}
 
-_ts_cartes_zone = ctk.CTkFrame(_ts_inner, fg_color="transparent")
-_ts_cartes_zone.pack(fill="x", pady=(30, 0))
-for _i in range(4):
-    _ts_cartes_zone.grid_columnconfigure(_i, weight=1, uniform="regime")
+_TS_SOUSTITRES = {
+    "libre":    ("Mode Libre — aucun engagement irrévocable.", "#B8AF9E"),
+    "tunnel":   ("Mode Tunnel — abandon impossible sans passer par le Tunnel de la Honte.", "#B8AF9E"),
+    "hardcore": ("Mode Hardcore — chaque type ci-dessous porte un verrouillage irrévocable.", "#E63946"),
+}
+
+_ts_cartes_holder = ctk.CTkFrame(_ts_inner, fg_color="transparent")
+_ts_cartes_holder.pack(pady=(32, 0))
+
+_ts_cartes_zone = ctk.CTkFrame(_ts_cartes_holder, fg_color="transparent")
+_ts_cartes_zone.pack()
+_ts_cartes_zone.pack_propagate(False)
 
 
-def _ts_selectionner_regime(regime):
-    _ts_regime_var[0] = regime
-    for r, (card, is_hc) in _ts_regime_refs.items():
-        if r == regime and not is_hc:
-            card.configure(border_color="#E63946", border_width=2)
-        elif r == regime and is_hc:
-            card.configure(border_color="#E8DFCE", border_width=2)
-        elif is_hc:
-            card.configure(border_color="#E63946", border_width=1)
+def _ts_selectionner_type(typ):
+    _ts_type_var[0] = typ
+    mode = session_cfg.get("mode")
+    is_hardcore = (mode == "hardcore")
+    for t, refs in _ts_type_refs.items():
+        selected = (t == typ)
+        pleine = is_hardcore and t == "quarantaine"
+        if is_hardcore:
+            refs["card"].configure(border_width=1, border_color="#E63946")
         else:
-            card.configure(border_color="#2A2622", border_width=1)
-    # Zone paramètre selon le régime
-    _ts_afficher_param(regime)
-    btn_ts_demarrer.configure(state="normal", fg_color="#E8DFCE",
-                              hover_color="#D8CFC0", text_color="#0A0908")
+            refs["card"].configure(border_width=2 if selected else 1,
+                                    border_color="#E63946" if selected else "#2A2622")
+        if refs["sel_badge"] is not None:
+            if selected:
+                if is_hardcore:
+                    refs["sel_badge"].place(relx=0.0, x=1, y=-1, anchor="nw")
+                else:
+                    refs["sel_badge"].place(relx=1.0, x=-1, y=-1, anchor="ne")
+            else:
+                refs["sel_badge"].place_forget()
+    _ts_afficher_param(typ)
+    btn_ts_demarrer.configure(
+        state="normal",
+        fg_color="#E63946" if is_hardcore else "#E8DFCE",
+        hover_color="#A82230" if is_hardcore else "#D8CFC0",
+        text_color="#0A0908")
 
 
-for _idx, (_reg, _ico, _titre, _tag, _desc, _pts, _mode, _typ) in enumerate(_TS_REGIMES):
-    _is_hc = (_reg == "quarantaine")
-    _card_bg = "#E63946" if _is_hc else "#141210"
-    _card_bd = "#E63946" if _is_hc else "#2A2622"
-    _txt_main = "#0A0908" if _is_hc else "#E8DFCE"
-    _txt_desc = "#0A0908" if _is_hc else "#B8AF9E"
-    _txt_tag  = "#0A0908" if _is_hc else "#8A8071"
-    _txt_pts  = "#0A0908" if _is_hc else "#E63946"
+def _ts_construire_cartes_type(mode):
+    """(Re)construit les cartes de l'étape 2 selon le mode choisi à l'étape 1.
+    Destroy/rebuild plutôt qu'un pool pré-construit : au plus 3 cartes, appelé
+    uniquement à la navigation étape1→étape2 (jamais dans une boucle chaude) —
+    le coût réel est de l'ordre de la milliseconde, un pool ajouterait de la
+    complexité d'état (garder 4 cartes possibles en mémoire + les
+    montrer/masquer/re-styler) sans gain perceptible."""
+    for w in _ts_cartes_zone.winfo_children():
+        w.destroy()
+    _ts_type_refs.clear()
+    _ts_type_var[0] = None
+    _ts_param_zone.pack_forget()
 
-    _card = ctk.CTkFrame(_ts_cartes_zone, fg_color=_card_bg, corner_radius=0,
-                         border_width=1, border_color=_card_bd, height=230)
-    _card.grid(row=0, column=_idx, sticky="nsew", padx=(0 if _idx == 0 else 8, 0))
-    _card.grid_propagate(False)
+    is_hardcore = (mode == "hardcore")
+    btn_ts_demarrer.configure(
+        state="disabled", fg_color="#1F1B18", hover_color="#1F1B18",
+        text_color="#5C574C",
+        text="Entrer en Hardcore   ▶" if is_hardcore else "Démarrer   ▶")
 
-    # Badge HARDCORE (coin haut-droit) pour la quarantaine
-    if _is_hc:
-        _badge = ctk.CTkLabel(_card, text="HARDCORE", font=theme_sumi.mono(9),
-                              fg_color="#0A0908", text_color="#E63946",
-                              corner_radius=0)
-        _badge.place(relx=1.0, x=-1, y=-1, anchor="ne")
+    txt, col = _TS_SOUSTITRES.get(mode, _TS_SOUSTITRES["libre"])
+    _ts_soustitre.configure(text=txt, text_color=col)
 
-    _pad = ctk.CTkFrame(_card, fg_color="transparent")
-    _pad.pack(fill="both", expand=True, padx=20, pady=22)
+    types_du_mode = _TS_MODE_TYPES.get(mode, ["fixe"])
+    n = len(types_du_mode)
+    for i in range(max(n, 1)):
+        _ts_cartes_zone.grid_columnconfigure(i, weight=1, uniform="type")
+    _ts_cartes_zone.configure(width=900 if n == 3 else 600, height=230)
 
-    # Icône dans un carré bordé
-    _ico_box = ctk.CTkFrame(_pad, width=36, height=36, corner_radius=0,
-                            fg_color="transparent",
-                            border_width=1, border_color=_txt_main)
-    _ico_box.pack(anchor="w")
-    _ico_box.pack_propagate(False)
-    ctk.CTkLabel(_ico_box, text=_ico, font=theme_sumi.serif(18),
-                 text_color=_txt_main).place(relx=0.5, rely=0.5, anchor="center")
+    for idx, typ in enumerate(types_du_mode):
+        _ico, _titre, _tag, _desc, _pts = _TS_TYPES[typ]
+        if is_hardcore and typ in ("pomodoro", "fixe"):
+            _desc = _desc + " Verrouillage Hardcore actif — abandon impossible avant la fin."
+        _pleine = is_hardcore and typ == "quarantaine"
 
-    ctk.CTkLabel(_pad, text=_titre, font=theme_sumi.serif(22),
-                 text_color=_txt_main, anchor="w").pack(fill="x", pady=(14, 0))
-    ctk.CTkLabel(_pad, text=_tag, font=theme_sumi.mono(9),
-                 text_color=_txt_tag, anchor="w").pack(fill="x", pady=(2, 0))
-    ctk.CTkLabel(_pad, text=_desc, font=("Segoe UI", 11), justify="left",
-                 text_color=_txt_desc, anchor="w", wraplength=180).pack(
-                 fill="x", expand=True, pady=(14, 0), anchor="nw")
-    ctk.CTkLabel(_pad, text=_pts, font=theme_sumi.mono(10),
-                 text_color=_txt_pts, anchor="w").pack(fill="x", pady=(14, 0))
+        def _make_type_click(t):
+            def _click(e=None):
+                _ts_selectionner_type(t)
+            return _click
 
-    def _make_regime_click(r):
-        def _click(e=None):
-            _ts_selectionner_regime(r)
-        return _click
-    _clic = _make_regime_click(_reg)
-    _card.bind("<Button-1>", _clic)
-    _card.configure(cursor="hand2")
-    for _w in _pad.winfo_children():
-        _w.bind("<Button-1>", _clic)
-        try:
-            _w.configure(cursor="hand2")
-        except Exception:
-            pass
-    _ts_regime_refs[_reg] = (_card, _is_hc)
-
-# ── Zone paramètre (apparaît sous les cartes selon le régime) ──
-_ts_param_zone = ctk.CTkFrame(_ts_inner, fg_color="transparent")
-
-_ts_param_label = ctk.CTkLabel(_ts_param_zone, text="",
-                                font=theme_sumi.mono(10), text_color="#8A8071")
-_ts_param_label.pack(side="left", padx=(0, 12))
-
-_ts_param_entry_fixe = ctk.CTkEntry(_ts_param_zone, textvariable=_ts_duree_var,
-                                     width=100, justify="center",
-                                     font=theme_sumi.mono(18),
-                                     fg_color="#141210", border_color="#2A2622",
-                                     text_color="#E8DFCE", corner_radius=2)
-_ts_param_entry_pomo = ctk.CTkEntry(_ts_param_zone, textvariable=_ts_cycles_var,
-                                     width=100, justify="center",
-                                     font=theme_sumi.mono(18),
-                                     fg_color="#141210", border_color="#2A2622",
-                                     text_color="#E8DFCE", corner_radius=2)
-_ts_param_entry_quar = ctk.CTkEntry(_ts_param_zone, textvariable=_ts_jours_var,
-                                     width=100, justify="center",
-                                     font=theme_sumi.mono(18),
-                                     fg_color="#141210", border_color="#2A2622",
-                                     text_color="#E8DFCE", corner_radius=2)
-_ts_param_hint = ctk.CTkLabel(_ts_param_zone, text="",
-                               font=theme_sumi.mono(9), text_color="#5C574C")
-_ts_param_hint.pack(side="left", padx=(12, 0))
+        _card, _sel_badge = _ts_construire_carte(
+            parent=_ts_cartes_zone, col=idx, height=230, pad_pady=22, desc_font_size=11,
+            bg="#E63946" if _pleine else "#141210",
+            bd="#E63946" if is_hardcore else "#2A2622",
+            txt_main="#0A0908" if _pleine else "#E8DFCE",
+            txt_tag="#0A0908" if _pleine else ("#E63946" if is_hardcore else "#8A8071"),
+            txt_desc="#0A0908" if _pleine else "#B8AF9E",
+            icone_char=_ico, titre=_titre, tag=_tag, desc=_desc,
+            pts=_pts, pts_color="#0A0908" if _pleine else "#E63946",
+            hc_badge=(("#0A0908", "#E63946") if _pleine else ("#E63946", "#0A0908")) if is_hardcore else None,
+            sel_badge_bg="#0A0908" if _pleine else "#E63946",
+            sel_badge_fg="#E63946" if _pleine else "#0A0908",
+            sel_badge_text="✓ SÉLECTIONNÉ" if is_hardcore else "SÉLECTIONNÉ",
+            on_click=_make_type_click(typ))
+        _ts_type_refs[typ] = {"card": _card, "sel_badge": _sel_badge}
 
 
-def _ts_afficher_param(regime):
-    """Affiche le champ paramètre correspondant au régime choisi."""
+# ── Zone paramètre (apparaît sous les cartes selon le type) ──
+_ts_param_zone = ctk.CTkFrame(_ts_inner, fg_color="#1F1B18", corner_radius=0,
+                               border_width=1, border_color="#2A2622")
+
+_ts_param_inner = ctk.CTkFrame(_ts_param_zone, fg_color="transparent")
+_ts_param_inner.pack(fill="x", padx=20, pady=16)
+
+_ts_param_texte = ctk.CTkFrame(_ts_param_inner, fg_color="transparent")
+_ts_param_texte.pack(side="left")
+_ts_param_label = ctk.CTkLabel(_ts_param_texte, text="",
+                                font=theme_sumi.mono(10), text_color="#8A8071", anchor="w")
+_ts_param_label.pack(fill="x", anchor="w")
+_ts_param_hint = ctk.CTkLabel(_ts_param_texte, text="",
+                               font=("Segoe UI", 12), text_color="#B8AF9E", anchor="w")
+_ts_param_hint.pack(fill="x", anchor="w", pady=(2, 0))
+
+_ts_param_valeur = ctk.CTkFrame(_ts_param_inner, fg_color="transparent")
+_ts_param_valeur.pack(side="right")
+
+_ts_param_entry_fixe = ctk.CTkEntry(_ts_param_valeur, textvariable=_ts_duree_var,
+                                     width=70, justify="center",
+                                     font=theme_sumi.mono(20),
+                                     fg_color="#141210", border_color="#E8DFCE",
+                                     text_color="#E8DFCE", corner_radius=0)
+_ts_param_entry_pomo = ctk.CTkEntry(_ts_param_valeur, textvariable=_ts_cycles_var,
+                                     width=70, justify="center",
+                                     font=theme_sumi.mono(20),
+                                     fg_color="#141210", border_color="#E8DFCE",
+                                     text_color="#E8DFCE", corner_radius=0)
+_ts_param_entry_quar = ctk.CTkEntry(_ts_param_valeur, textvariable=_ts_jours_var,
+                                     width=70, justify="center",
+                                     font=theme_sumi.mono(20),
+                                     fg_color="#141210", border_color="#E8DFCE",
+                                     text_color="#E8DFCE", corner_radius=0)
+_ts_param_unite = ctk.CTkLabel(_ts_param_valeur, text="",
+                                font=theme_sumi.mono(11), text_color="#8A8071")
+_ts_param_unite.pack(side="left", padx=(10, 0))
+
+
+def _ts_afficher_param(typ):
+    """Affiche le champ paramètre correspondant au type choisi."""
     for e in (_ts_param_entry_fixe, _ts_param_entry_pomo, _ts_param_entry_quar):
         e.pack_forget()
-    if regime == "libre":
-        _ts_param_label.configure(text="DURÉE (MINUTES)")
+    is_hardcore = (session_cfg.get("mode") == "hardcore")
+    bordure = "#E63946" if is_hardcore else "#2A2622"
+    label_col = "#E63946" if is_hardcore else "#8A8071"
+    entree_bordure = "#E63946" if is_hardcore else "#E8DFCE"
+    _ts_param_zone.configure(border_color=bordure)
+    _ts_param_label.configure(text_color=label_col)
+    for e in (_ts_param_entry_fixe, _ts_param_entry_pomo, _ts_param_entry_quar):
+        e.configure(border_color=entree_bordure)
+
+    if typ == "fixe":
+        _ts_param_label.configure(text="PARAMÈTRE — DURÉE FIXE")
+        _ts_param_hint.configure(text="Durée totale de la session.")
         _ts_param_entry_fixe.pack(side="left")
-        _ts_param_hint.configure(text="Exigence Adaptive Focus selon la durée")
-    elif regime == "pomodoro":
-        _ts_param_label.configure(text="NOMBRE DE CYCLES")
+        _ts_param_unite.configure(text="minutes")
+    elif typ == "pomodoro":
+        _ts_param_label.configure(text="PARAMÈTRE — POMODORO")
+        _ts_param_hint.configure(text="Nombre de cycles avant la pause longue.")
         _ts_param_entry_pomo.pack(side="left")
-        _ts_param_hint.configure(text="1 cycle = 25 min focus + 5 min pause")
-    elif regime == "quarantaine":
-        _ts_param_label.configure(text="NOMBRE DE JOURS")
+        _ts_param_unite.configure(text="cycles")
+    elif typ == "quarantaine":
+        _ts_param_label.configure(text="PARAMÈTRE — QUARANTAINE")
+        _ts_param_hint.configure(text="Durée de quarantaine. Non modifiable une fois lancée.")
         _ts_param_entry_quar.pack(side="left")
-        _ts_param_hint.configure(text="Blocage continu sans porte de sortie facile")
+        _ts_param_unite.configure(text="jours")
     else:  # infini
         _ts_param_label.configure(text="AUCUN PARAMÈTRE")
         _ts_param_hint.configure(text="Le chrono monte jusqu'à ce que tu arrêtes")
-    _ts_param_zone.pack(pady=(24, 0))
+        _ts_param_unite.configure(text="")
+    _ts_param_zone.pack(pady=(20, 0))
 
 
 def _ts_reset():
-    """Remet l'écran type_session à zéro (aucun régime sélectionné)."""
-    _ts_regime_var[0] = None
-    for r, (card, is_hc) in _ts_regime_refs.items():
-        card.configure(border_color="#E63946" if is_hc else "#2A2622", border_width=1)
+    """Remet l'étape 2 (type) à zéro — sans toucher au mode choisi à l'étape 1."""
+    _ts_type_var[0] = None
+    is_hardcore = (session_cfg.get("mode") == "hardcore")
+    for t, refs in _ts_type_refs.items():
+        refs["card"].configure(border_width=1, border_color="#E63946" if is_hardcore else "#2A2622")
+        if refs["sel_badge"] is not None:
+            refs["sel_badge"].place_forget()
     _ts_param_zone.pack_forget()
     btn_ts_demarrer.configure(state="disabled", fg_color="#1F1B18",
                               hover_color="#1F1B18", text_color="#5C574C")
 
 
 def _ts_appliquer_et_continuer():
-    """Applique les paramètres du régime et passe à l'écran contrat."""
-    regime = _ts_regime_var[0]
-    meta = _TS_REGIME_META.get(regime, {"mode": "libre", "type": "fixe"})
-    session_cfg["mode"] = meta["mode"]
-    session_cfg["type"] = meta["type"]
-    session_cfg["regime"] = regime
-    session_cfg["hardcore"] = (meta["mode"] == "hardcore")
+    """Applique le type choisi et passe à l'écran contrat (ou au popup Hardcore)."""
+    typ = _ts_type_var[0]
+    session_cfg["type"] = typ
     try:
         session_cfg["duree_minutes"] = max(1, int(_ts_duree_var.get()))
     except ValueError:
@@ -5464,6 +5751,16 @@ def _ts_appliquer_et_continuer():
         session_cfg["nb_jours"] = max(1, int(_ts_jours_var.get()))
     except ValueError:
         session_cfg["nb_jours"] = 1
+    # Numéro de session (en-tête du Contrat + overlay de violation Hardcore) —
+    # calculé ici, sur le vrai chemin de démarrage (ouvrir_contrat() ne sert
+    # que le bouton "Reprendre la dernière", jamais atteint depuis l'assistant).
+    try:
+        from stats_manager import charger_sessions
+        num_session = len(charger_sessions()) + 1
+    except Exception:
+        num_session = 1
+    session_cfg["num_session"] = num_session
+    lbl_contrat_meta.configure(text=f"CONTRAT DE TRAVAIL · SESSION #{num_session}")
     if session_cfg["hardcore"]:
         ouvrir_confirmation()
     else:
@@ -5471,8 +5768,8 @@ def _ts_appliquer_et_continuer():
 
 
 def _ts_continuer():
-    regime = _ts_regime_var[0]
-    if not regime:
+    typ = _ts_type_var[0]
+    if not typ:
         return
     _ts_appliquer_et_continuer()
 
@@ -5485,10 +5782,10 @@ ctk.CTkButton(_ts_nav, text="← Retour", width=130, height=40,
               font=theme_sumi.ui(12), corner_radius=3,
               fg_color="transparent", hover_color="#1F1B18",
               border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
-              command=lambda: slide_vers(ecran_accueil, ecran_type_session)
+              command=lambda: slide_vers(ecran_type_mode, ecran_type_session)
               ).pack(side="left")
 
-btn_ts_demarrer = ctk.CTkButton(_ts_nav, text="Démarrer   ▶", width=180, height=40,
+btn_ts_demarrer = ctk.CTkButton(_ts_nav, text="Démarrer   ▶", width=200, height=40,
                                  font=theme_sumi.ui(14, "bold"), corner_radius=3,
                                  fg_color="#1F1B18", hover_color="#1F1B18",
                                  text_color="#5C574C", state="disabled",
@@ -5716,10 +6013,20 @@ def _wl_construire(first_session: bool, wl_sauvegardee: dict):
 
     _build_rows(_wl_apps_list)
 
-    def _on_search(*_):
+    _wl_search_after_id = [None]
+
+    def _appliquer_recherche():
         q = search_var.get().lower().strip()
         filtered = [(n, p) for n, p in _wl_apps_list if q in n.lower()] if q else _wl_apps_list
         _build_rows(filtered)
+
+    def _on_search(*_):
+        # Anti-rebond : reconstruire la liste (destroy+rebuild de tous les widgets)
+        # seulement 150 ms après la dernière frappe, pas à chaque caractère — sinon
+        # ça sature le thread UI et fait sauter des touches en tapant vite.
+        if _wl_search_after_id[0] is not None:
+            ecran_whitelist_nouveau.after_cancel(_wl_search_after_id[0])
+        _wl_search_after_id[0] = ecran_whitelist_nouveau.after(150, _appliquer_recherche)
 
     search_var.trace_add("write", _on_search)
 
@@ -6187,6 +6494,12 @@ def _lancer_session_finale():
         duree_minutes = mins % 60
         mode_infini = False
         demarrer()
+
+    # Watchdog léger : jamais pour Hardcore (verrouillage lourd via hc_activer
+    # ci-dessous à la place). Point de passage unique — mode déjà fixé dans
+    # session_cfg à ce stade, donc plus besoin de re-vérifier dans chaque demarrer*().
+    if not session_cfg.get("hardcore"):
+        _session_watchdog_activer()
 
     # Activer le Mode Hardcore si demandé.
     # En reprise (après kill/redémarrage), on réactive directement sans re-gater le premium

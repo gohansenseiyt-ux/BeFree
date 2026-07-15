@@ -5,15 +5,11 @@ Filtres temporels + formatage pour l'écran Statistiques.
 
 import json
 import os
-import sys
 from datetime import datetime, timedelta, date
 
-# Ancré sur le dossier de l'exe une fois empaqueté (PyInstaller --onefile),
-# jamais sur son dossier d'extraction temporaire — sinon les stats seraient
-# perdues à chaque relancement. Identique à DATA_DIR dans main.py.
-_DATA_DIR = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
-             else os.path.dirname(os.path.abspath(__file__)))
-STATS_FILE = os.path.join(_DATA_DIR, "stats.json")
+from app_paths import data_path
+
+STATS_FILE = data_path("stats.json")
 
 
 # ── Chargement / Sauvegarde ──
@@ -97,6 +93,12 @@ def nombre_sessions(sessions):
     return len(sessions)
 
 
+def sessions_completees(sessions):
+    """Exclut les sessions abandonnées (statut ABANDON) des agrégats —
+    une session interrompue ne doit pas gonfler temps focus/série/compteur."""
+    return [s for s in sessions if not s.get("abandon")]
+
+
 def get_app_names(sessions):
     """Retourne la liste des noms d'applications uniques."""
     noms = set()
@@ -176,10 +178,10 @@ FILTER_LABELS = {
 # ── Classe StatsManager : API orientée objet ──
 
 class StatsManager:
-    """Gestion centralisée des données statistiques depuis stats.json."""
-
-    def __init__(self, stats_file=STATS_FILE):
-        self.stats_file = stats_file
+    """Gestion centralisée des données statistiques depuis stats.json.
+    Sans état propre : toutes les méthodes lisent le fichier STATS_FILE de ce
+    module (via charger_sessions()) — il n'y a qu'un seul fichier de stats
+    par installation, pas de paramètre de fichier par instance."""
 
     # ── API publique par période ──
 
@@ -203,7 +205,7 @@ class StatsManager:
 
     def get_7day_data(self):
         """Retourne (labels, valeurs) pour le graphique hebdomadaire."""
-        sessions = charger_sessions()
+        sessions = sessions_completees(charger_sessions())
         jours_noms = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
         today = date.today()
         labels, valeurs = [], []
@@ -221,7 +223,7 @@ class StatsManager:
 
     def get_winstreak(self):
         """Retourne le nombre de jours consécutifs avec au moins une session."""
-        sessions = charger_sessions()
+        sessions = sessions_completees(charger_sessions())
         dates = set()
         for s in sessions:
             try:
@@ -247,7 +249,7 @@ class StatsManager:
 
     def _filtrer(self, periode):
         """Applique un filtre temporel et retourne les stats agrégées."""
-        sessions = charger_sessions()
+        sessions = sessions_completees(charger_sessions())
         filtre_fn = FILTERS[periode]
         sessions_filtrees = filtre_fn(sessions)
 

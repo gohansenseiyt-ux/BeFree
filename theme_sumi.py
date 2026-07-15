@@ -186,6 +186,20 @@ def _draw_parametres(color):
     return img
 
 
+def _draw_tunnel(color):
+    """3 cercles concentriques (mode Tunnel, assistant de session)."""
+    img, d = _icon_canvas()
+    d.ellipse([3.5, 3.5, 36.5, 36.5], outline=color, width=_ICON_STROKE)
+    d.ellipse([9, 9, 31, 31], outline=color, width=_ICON_STROKE)
+    d.ellipse([15, 15, 25, 25], outline=color, width=_ICON_STROKE)
+    return img
+
+
+def tunnel_icon(color, size=19):
+    """CTkImage de l'icone Tunnel (cercles concentriques) a la couleur donnee."""
+    return ctk.CTkImage(light_image=_draw_tunnel(color), size=(size, size))
+
+
 _ICON_DRAWERS = {
     "accueil": _draw_accueil,
     "demarrer": _draw_demarrer,
