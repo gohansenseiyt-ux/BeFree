@@ -11,6 +11,7 @@ import os
 from stats_manager import formater_duree, FILTER_LABELS
 import chart_renderer
 import theme_sumi
+from i18n import t
 
 
 class StatsDashboard:
@@ -24,9 +25,14 @@ class StatsDashboard:
         "border_lt": theme_sumi.RULE_LIGHT,
     }
 
-    SEGMENT_LABELS = {"jour": "Jour", "semaine": "Semaine", "mois": "Mois", "total": "Total"}
-
     def __init__(self, parent, stats_manager, colors=None, on_export=None):
+        # Construit ici (pas en attribut de classe) : évalué à l'instanciation,
+        # après que main.py ait fixé i18n.set_language() au démarrage — un dict
+        # de classe serait figé en français, évalué trop tôt à l'import du module.
+        self.SEGMENT_LABELS = {
+            "jour": t("stats.filtre_jour"), "semaine": t("stats.filtre_semaine"),
+            "mois": t("stats.filtre_mois"), "total": t("stats.filtre_total"),
+        }
         self.parent = parent
         self.stats = stats_manager
         self.c = colors if colors else self.DEFAULT_COLORS
@@ -46,15 +52,15 @@ class StatsDashboard:
 
         header_gauche = ctk.CTkFrame(header, fg_color="transparent")
         header_gauche.pack(side="left", anchor="w")
-        self.lbl_titre = ctk.CTkLabel(header_gauche, text="Statistiques",
+        self.lbl_titre = ctk.CTkLabel(header_gauche, text=t("stats.page_titre"),
                                        font=theme_sumi.serif(28), text_color=c["text"],
                                        anchor="w")
         self.lbl_titre.pack(anchor="w")
-        ctk.CTkLabel(header_gauche, text="Ton temps face aux applications, brut.",
+        ctk.CTkLabel(header_gauche, text=t("stats.page_sous_titre"),
                      font=("Segoe UI", 12), text_color=c["text_dim"],
                      anchor="w").pack(anchor="w", pady=(2, 0))
 
-        lbl_export = ctk.CTkLabel(header, text="→ EXPORT CSV",
+        lbl_export = ctk.CTkLabel(header, text=t("stats.lien_export"),
                                    font=theme_sumi.mono(10), text_color=c["text_dim"],
                                    cursor="hand2")
         lbl_export.pack(side="right", anchor="e", pady=(6, 0))
@@ -84,7 +90,7 @@ class StatsDashboard:
 
         # ── Bouton TRIER ──
         self.btn_sort = ctk.CTkButton(
-            frame_filtres, text="Trier : Max Temps",
+            frame_filtres, text=t("stats.trier"),
             font=("JetBrains Mono", 11, "bold"),
             width=130, height=30,
             fg_color="transparent", border_width=1,
@@ -115,7 +121,7 @@ class StatsDashboard:
                       text_color=c["crimson"]).place(relx=1.0, rely=1.0, x=-16, y=-16)
 
         self.lbl_chart_title = ctk.CTkLabel(
-            self.chart_frame, text="Analyse Globale",
+            self.chart_frame, text=t("stats.titre_analyse_globale"),
             font=theme_sumi.serif(17), text_color=c["text"])
         self.lbl_chart_title.pack(pady=(30, 4))
 
@@ -127,12 +133,12 @@ class StatsDashboard:
         bottom_bar.pack(fill="x", padx=10, pady=(0, 8))
 
         self.lbl_stat_moyenne = ctk.CTkLabel(
-            bottom_bar, text="Moyenne : 0 min",
+            bottom_bar, text=t("stats.moyenne", v="0 min"),
             font=("JetBrains Mono", 11), text_color=c["text_dim"])
         self.lbl_stat_moyenne.pack(side="left", padx=(0, 20))
 
         self.lbl_stat_total = ctk.CTkLabel(
-            bottom_bar, text="Total : 0 min",
+            bottom_bar, text=t("stats.total_label", v="0 min"),
             font=("JetBrains Mono", 11), text_color=c["text_dim"])
         self.lbl_stat_total.pack(side="left")
 
@@ -140,7 +146,7 @@ class StatsDashboard:
                       text_color=c["border_dark"]).pack(side="left", padx=12)
 
         self.lbl_stat_sessions = ctk.CTkLabel(
-            bottom_bar, text="Sessions : 0",
+            bottom_bar, text=t("stats.sessions_label", n=0),
             font=("JetBrains Mono", 11), text_color=c["text_dim"])
         self.lbl_stat_sessions.pack(side="left")
 
@@ -160,7 +166,7 @@ class StatsDashboard:
                 btn.configure(fg_color="transparent", text_color=c["text_dim"])
 
         sort_arrow = "▲" if self.sort_asc else "▼"
-        self.btn_sort.configure(text=f"Trier : Max Temps {sort_arrow}")
+        self.btn_sort.configure(text=t("stats.trier_fleche", fleche=sort_arrow))
 
         if periode == "total":
             self._prep_total()
@@ -186,20 +192,20 @@ class StatsDashboard:
     def _prep_jour(self):
         labels, valeurs = self._get_hourly_data()
         chart_renderer.generate_chart(self.chart_container, labels, valeurs)
-        self.lbl_chart_title.configure(text="Journalier — Heures Actives")
+        self.lbl_chart_title.configure(text=t("stats.titre_jour"))
 
     def _prep_semaine(self):
         labels, valeurs = self.stats.get_7day_data()
         chart_renderer.generate_chart(
             self.chart_container, labels, valeurs,
             highlight_idx=6, chart_type='line')
-        self.lbl_chart_title.configure(text="Hebdomadaire — 7 Derniers Jours")
+        self.lbl_chart_title.configure(text=t("stats.titre_semaine"))
 
     def _prep_mois(self):
         labels, valeurs = self._get_weekly_data()
         chart_renderer.generate_chart(
             self.chart_container, labels, valeurs, chart_type='line')
-        self.lbl_chart_title.configure(text="Mensuel — 4 Semaines")
+        self.lbl_chart_title.configure(text=t("stats.titre_mois"))
 
     def _prep_total(self):
         data = self.stats.get_data_total()
@@ -213,7 +219,7 @@ class StatsDashboard:
             sort_asc=self.sort_asc,
             show_total=True,
         )
-        self.lbl_chart_title.configure(text="Total — Top Applications")
+        self.lbl_chart_title.configure(text=t("stats.titre_total"))
 
     # ─────────────────────────────────────────────────────────
     #  DONNÉES
@@ -259,7 +265,7 @@ class StatsDashboard:
                 if debut <= datetime.fromisoformat(s["timestamp"]).date() < fin
             )
             valeurs[i] = round(total, 1)
-        labels = [f"S{3 - i + 1}" for i in range(4)]
+        labels = [t("stats.semaine_courte", n=3 - i + 1) for i in range(4)]
         return labels, valeurs
 
     @staticmethod
@@ -268,7 +274,7 @@ class StatsDashboard:
         return charger_sessions()
 
     def _refresh_stats(self, data):
-        self.lbl_stat_moyenne.configure(text=f"Moyenne : {formater_duree(data['moyenne'])}")
-        self.lbl_stat_total.configure(text=f"Total : {formater_duree(data['temps_total'])}")
+        self.lbl_stat_moyenne.configure(text=t("stats.moyenne", v=formater_duree(data['moyenne'])))
+        self.lbl_stat_total.configure(text=t("stats.total_label", v=formater_duree(data['temps_total'])))
         nb = data.get("nb_jours", 0)
-        self.lbl_stat_sessions.configure(text=f"Sessions : {nb}")
+        self.lbl_stat_sessions.configure(text=t("stats.sessions_label", n=nb))

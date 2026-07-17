@@ -12,6 +12,7 @@ import matplotlib.ticker as ticker
 import matplotlib.font_manager as font_manager
 
 import theme_sumi
+from i18n import t
 
 _FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
 for _f in ("JetBrainsMono-Regular.ttf", "JetBrainsMono-Bold.ttf"):
@@ -357,7 +358,7 @@ def _draw_empty_state(ax, pal):
     ax.grid(axis="both", color=theme_sumi.SURFACE, linestyle=":", linewidth=0.5)
     ax.set_axisbelow(True)
     ax.text(0.5, 0.5,
-            "Aucune donnée de focus détectée.",
+            t("chart.aucune_donnee"),
             fontfamily=MONO_FONT, fontsize=11, color=theme_sumi.MUTED,
             ha="center", va="center", transform=ax.transAxes)
     for side in ("top", "right", "bottom", "left"):

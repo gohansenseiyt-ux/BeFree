@@ -4,6 +4,7 @@ Palette + polices + helpers, portes depuis la refonte visuelle Claude Design
 (direction 1b, dojo/kendo sombre).
 """
 import ctypes
+import math
 import os
 
 from PIL import Image, ImageDraw
@@ -176,27 +177,99 @@ def _draw_sites(color):
 
 
 def _draw_parametres(color):
-    """Molette simplifiee : cercle + 4 traits cardinaux."""
+    """Engrenage 8 dents."""
     img, d = _icon_canvas()
-    d.ellipse([13, 13, 27, 27], outline=color, width=_ICON_STROKE)
-    d.line([(20, 2), (20, 10)], fill=color, width=_ICON_STROKE)
-    d.line([(20, 30), (20, 38)], fill=color, width=_ICON_STROKE)
-    d.line([(2, 20), (10, 20)], fill=color, width=_ICON_STROKE)
-    d.line([(30, 20), (38, 20)], fill=color, width=_ICON_STROKE)
+    cx, cy = 20, 20
+    r_out, r_in, r_c = 17, 12, 6
+    N, half = 8, 9
+    period = 360 / N
+    pts = []
+    for i in range(N):
+        ca = i * period - 90
+        gap_start = ca - period + half
+        gap_end   = ca - half
+        for t in (0.25, 0.5, 0.75):
+            a = math.radians(gap_start + t * (gap_end - gap_start))
+            pts.append((cx + r_in * math.cos(a), cy + r_in * math.sin(a)))
+        for r, ang in [(r_in, gap_end), (r_out, gap_end),
+                       (r_out, ca + half), (r_in, ca + half)]:
+            a = math.radians(ang)
+            pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    d.polygon(pts, outline=color, width=_ICON_STROKE)
+    d.ellipse([cx - r_c, cy - r_c, cx + r_c, cy + r_c],
+              outline=color, width=_ICON_STROKE)
     return img
 
 
 def _draw_tunnel(color):
-    """3 cercles concentriques (mode Tunnel, assistant de session)."""
+    """Arche d'entrée de tunnel avec perspective intérieure."""
     img, d = _icon_canvas()
-    d.ellipse([3.5, 3.5, 36.5, 36.5], outline=color, width=_ICON_STROKE)
-    d.ellipse([9, 9, 31, 31], outline=color, width=_ICON_STROKE)
-    d.ellipse([15, 15, 25, 25], outline=color, width=_ICON_STROKE)
+    d.arc([3, 2, 37, 36], start=180, end=0, fill=color, width=_ICON_STROKE)
+    d.line([(3, 19), (3, 38)], fill=color, width=_ICON_STROKE)
+    d.line([(37, 19), (37, 38)], fill=color, width=_ICON_STROKE)
+    d.line([(3, 38), (37, 38)], fill=color, width=_ICON_STROKE)
+    d.arc([11, 10, 29, 28], start=180, end=0, fill=color, width=2)
+    d.line([(11, 19), (11, 38)], fill=color, width=2)
+    d.line([(29, 19), (29, 38)], fill=color, width=2)
+    d.line([(3, 38), (20, 24)], fill=color, width=2)
+    d.line([(37, 38), (20, 24)], fill=color, width=2)
     return img
 
 
+def _draw_card_libre(color):
+    """Sablier — chrono simple, aucune contrainte."""
+    img, d = _icon_canvas()
+    d.rectangle([7, 3, 33, 8], outline=color, width=_ICON_STROKE)
+    d.rectangle([7, 32, 33, 37], outline=color, width=_ICON_STROKE)
+    d.line([(7, 8), (12, 13), (15, 20), (12, 27), (7, 32)],
+           fill=color, width=_ICON_STROKE)
+    d.line([(33, 8), (28, 13), (25, 20), (28, 27), (33, 32)],
+           fill=color, width=_ICON_STROKE)
+    return img
+
+
+def _draw_card_hardcore(color):
+    """Cadenas fermé — irréversible, verrouillage total."""
+    img, d = _icon_canvas()
+    d.arc([10, 4, 30, 24], start=180, end=360, fill=color, width=_ICON_STROKE)
+    d.line([(10, 14), (10, 22)], fill=color, width=_ICON_STROKE)
+    d.line([(30, 14), (30, 22)], fill=color, width=_ICON_STROKE)
+    d.rectangle([6, 20, 34, 36], outline=color, width=_ICON_STROKE)
+    d.ellipse([17, 24, 23, 30], outline=color, width=2)
+    d.line([(20, 29), (20, 34)], fill=color, width=2)
+    return img
+
+
+def _draw_card_fixe(color):
+    """Cage à oiseaux — durée cloisonnée."""
+    img, d = _icon_canvas()
+    d.ellipse([17, 1, 23, 7], outline=color, width=2)
+    d.arc([6, 6, 34, 22], start=180, end=0, fill=color, width=_ICON_STROKE)
+    for _bx in [8, 14, 20, 26, 32]:
+        d.line([(_bx, 7), (_bx, 33)], fill=color, width=2)
+    d.line([(7, 22), (33, 22)], fill=color, width=2)
+    d.line([(7, 28), (33, 28)], fill=color, width=2)
+    d.rectangle([5, 33, 35, 37], fill=color)
+    return img
+
+
+_CARD_DRAWERS = {
+    "libre":     _draw_card_libre,
+    "tunnel":    _draw_tunnel,
+    "hardcore":  _draw_card_hardcore,
+    "fixe":      _draw_card_fixe,
+}
+
+
+def card_icon(name, color, size=19):
+    """CTkImage pour une icone de carte mode/type (assistant de session)."""
+    drawer = _CARD_DRAWERS.get(name)
+    if drawer is None:
+        return None
+    return ctk.CTkImage(light_image=drawer(color), size=(size, size))
+
+
 def tunnel_icon(color, size=19):
-    """CTkImage de l'icone Tunnel (cercles concentriques) a la couleur donnee."""
     return ctk.CTkImage(light_image=_draw_tunnel(color), size=(size, size))
 
 

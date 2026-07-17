@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta, date
 
 from app_paths import data_path
+from i18n import t
 
 STATS_FILE = data_path("stats.json")
 
@@ -115,17 +116,17 @@ def sessions_par_app(sessions, app_name):
 
 
 def formater_duree(total_min):
-    """Formate un total de minutes en 'Xh Ymin' ou '0 min'."""
+    """Formate un total de minutes en 'Xh Ymin' ou '0 min', dans la langue courante."""
     if total_min is None or total_min == 0:
-        return "0 min"
+        return t("duree.vide")
     heures = int(total_min // 60)
     minutes = int(total_min % 60)
     parties = []
     if heures > 0:
-        parties.append(f"{heures}h")
+        parties.append(t("duree.heures", h=heures))
     if minutes > 0:
-        parties.append(f"{minutes}min")
-    return " ".join(parties) if parties else "0 min"
+        parties.append(t("duree.minutes", m=minutes))
+    return " ".join(parties) if parties else t("duree.vide")
 
 
 # ── Filtres temporels ──

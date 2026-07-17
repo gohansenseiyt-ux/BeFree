@@ -217,6 +217,8 @@ from stats_manager import (sauvegarder_session,
                            StatsManager, formater_duree)
 from ui_elements import StatsDashboard
 import theme_sumi
+import i18n
+from i18n import t
 
 theme_sumi.register_fonts()
 
@@ -302,6 +304,18 @@ GRADES = [
     (800,  "Maître",     "師", "#D4A24C"),
     (1600, "BeFree",     "禅", "#E63946"),
 ]
+
+# GRADES[i][1] reste la clé interne stable (comparaisons g[1] == nom) — la
+# traduction n'intervient qu'à l'affichage, via cette table de correspondance.
+_GRADE_KEY = {
+    "Novice": "grade.novice", "Habitué": "grade.habitue",
+    "Focalisé": "grade.focalise", "Discipliné": "grade.discipline",
+    "Maître": "grade.maitre", "BeFree": "grade.befree",
+}
+
+
+def _grade_label(nom: str) -> str:
+    return t(_GRADE_KEY.get(nom, nom))
 
 
 # ── BLACKLIST : processus système Windows à IGNORER complètement ──
@@ -662,7 +676,7 @@ def auto_detect_app(nom_proc, exe_path=None, pid=None, pids_visibles=None):
     # Notification dans le statut
     try:
         label_statut.configure(
-            text=f"[SYS.DETECT] Nouvelle app surveillée : {clean_name}",
+            text=t("detect.nouvelle_app", app=clean_name),
             text_color="orange")
         root.after(3000, lambda: label_statut.configure(text=""))
     except Exception:
@@ -914,7 +928,7 @@ def activer_bouton_sidebar(nom):
 
 def _flash_session_active():
     """Feedback visuel quand on tente de naviguer pendant une session."""
-    label_statut.configure(text="⛔  Session en cours — reste concentré !", text_color="#E63946")
+    label_statut.configure(text=t("misc.session_active_flash"), text_color="#E63946")
     root.after(2000, lambda: label_statut.configure(
         text="", text_color=COLOR_TEXT_DIM) if timer_active else None)
 
@@ -944,8 +958,8 @@ def naviguer_sidebar(page):
         if mot_de_passe_actif():
             ouvrir_dialog_mdp(
                 lambda: montrer_ecran(ecran_parametres),
-                titre="Paramètres protégés",
-                message="Entrez le mot de passe pour accéder aux paramètres :",
+                titre=t("mdp.parametres_titre"),
+                message=t("mdp.parametres_message"),
             )
         else:
             montrer_ecran(ecran_parametres)
@@ -993,7 +1007,7 @@ def ouvrir_confirmation():
     if popup is not None and popup.winfo_exists():
         return
     popup = ctk.CTkToplevel(root)
-    popup.title("Confirmation Hardcore")
+    popup.title(t("popup_hc.titre_fenetre"))
     popup.resizable(False, False)
     popup.transient(root)
     popup.grab_set()
@@ -1011,7 +1025,7 @@ def ouvrir_confirmation():
     carte.place(x=0, y=0)
 
     # Badge coin (chevauche la bordure, top:-1 right:-1)
-    ctk.CTkLabel(carte, text="HARDCORE FOCUS", font=theme_sumi.mono(10),
+    ctk.CTkLabel(carte, text=t("popup_hc.badge"), font=theme_sumi.mono(10),
                  fg_color=theme_sumi.HANKO, text_color=theme_sumi.SUMI,
                  corner_radius=0, padx=12, pady=6
                  ).place(relx=1.0, x=-1, y=-1, anchor="ne")
@@ -1028,24 +1042,24 @@ def ouvrir_confirmation():
     ctk.CTkLabel(seal, text="禅", font=theme_sumi.serif(44),
                  text_color=theme_sumi.SUMI).place(relx=0.5, rely=0.5, anchor="center")
 
-    ctk.CTkLabel(contenu, text="Prêt à entrer\nen Hardcore Focus ?",
+    ctk.CTkLabel(contenu, text=t("popup_hc.titre"),
                  font=theme_sumi.serif(32), text_color=theme_sumi.INK,
                  justify="center").pack(pady=(20, 0))
 
     ctk.CTkLabel(
         contenu,
-        text="Une fois entré, tu ne peux plus arrêter la session avant la fin —",
+        text=t("popup_hc.phrase1"),
         font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
         wraplength=440, justify="center").pack(pady=(12, 0))
     ctk.CTkLabel(
-        contenu, text="ni pause, ni annulation.",
+        contenu, text=t("popup_hc.phrase1b"),
         font=theme_sumi.ui(12, "bold"), text_color=theme_sumi.HANKO,
         justify="center").pack()
     _conf_type = session_cfg.get("type")
     if _conf_type == "quarantaine":
-        _conf_phrase2 = "Les .exe distraction seront mis en quarantaine."
+        _conf_phrase2 = t("popup_hc.phrase2_quarantaine")
     else:
-        _conf_phrase2 = "L'application reste verrouillée jusqu'à la fin."
+        _conf_phrase2 = t("popup_hc.phrase2_defaut")
     ctk.CTkLabel(
         contenu, text=_conf_phrase2,
         font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
@@ -1070,7 +1084,7 @@ def ouvrir_confirmation():
         _conf_duree_txt = f"{_conf_h:02d}:{_conf_m:02d}:00"
     ligne_duree = ctk.CTkFrame(bloc_inner, fg_color="transparent")
     ligne_duree.pack(fill="x")
-    ctk.CTkLabel(ligne_duree, text="DURÉE VERROUILLÉE", font=theme_sumi.mono(10),
+    ctk.CTkLabel(ligne_duree, text=t("popup_hc.duree_verrouillee"), font=theme_sumi.mono(10),
                  text_color=theme_sumi.MUTED, anchor="w").pack(side="left")
     ctk.CTkLabel(ligne_duree, text=_conf_duree_txt, font=theme_sumi.mono(20),
                  text_color=theme_sumi.INK, anchor="e").pack(side="right")
@@ -1078,7 +1092,7 @@ def ouvrir_confirmation():
     pts_txt = _TS_TYPES.get(_conf_type, _TS_TYPES["quarantaine"])[4]
     ligne_recomp = ctk.CTkFrame(bloc_inner, fg_color="transparent")
     ligne_recomp.pack(fill="x", pady=(8, 0))
-    ctk.CTkLabel(ligne_recomp, text="RÉCOMPENSE SI TENU", font=theme_sumi.mono(10),
+    ctk.CTkLabel(ligne_recomp, text=t("popup_hc.recompense"), font=theme_sumi.mono(10),
                  text_color=theme_sumi.MUTED, anchor="w").pack(side="left")
     ctk.CTkLabel(ligne_recomp, text=pts_txt, font=theme_sumi.mono(14),
                  text_color=theme_sumi.GOLD, anchor="e").pack(side="right")
@@ -1090,7 +1104,7 @@ def ouvrir_confirmation():
         btn_entrer.configure(state="normal" if var_comprends.get() else "disabled")
 
     ctk.CTkCheckBox(
-        contenu, text="Je comprends que je ne pourrai pas revenir en arrière.",
+        contenu, text=t("popup_hc.checkbox"),
         variable=var_comprends, onvalue=True, offvalue=False,
         font=theme_sumi.ui(12), text_color=theme_sumi.INK_2,
         checkbox_width=16, checkbox_height=16, corner_radius=0,
@@ -1109,14 +1123,14 @@ def ouvrir_confirmation():
         popup.destroy()
         slide_vers(ecran_contrat, ecran_type_session)
 
-    ctk.CTkButton(frame_btn, text="Annuler", height=44, width=180,
+    ctk.CTkButton(frame_btn, text=t("common.annuler"), height=44, width=180,
                   font=theme_sumi.ui(13), corner_radius=0,
                   fg_color="transparent", hover_color=theme_sumi.SURFACE,
                   border_width=1, border_color=theme_sumi.INK, text_color=theme_sumi.INK,
                   command=_annuler).pack(side="left")
 
     btn_entrer = ctk.CTkButton(
-        frame_btn, text="Entrer en Hardcore   ▶", height=44, width=250,
+        frame_btn, text=t("common.entrer_hardcore"), height=44, width=250,
         font=theme_sumi.ui(13, "bold"), corner_radius=0,
         fg_color=theme_sumi.HANKO, hover_color=theme_sumi.HANKO_DEEP,
         text_color=theme_sumi.SUMI, state="disabled",
@@ -1138,7 +1152,7 @@ def fermer_application(process_obj, nom_process):
     try:
         process_obj.terminate()
         label_statut.configure(
-            text="Application interdite détectée ! Fermeture automatique.",
+            text=t("misc.app_interdite_fermee"),
             text_color="orange"
         )
         root.after(3000, lambda: label_statut.configure(text=""))
@@ -1558,8 +1572,8 @@ def victoire():
     if victory_printed:
         return
     victory_printed = True
-    label_chrono.configure(text="VALIDÉ !", text_color=COLOR_SUCCESS)
-    label_statut.configure(text="Session terminée. Tu as gagné le droit de jouer.", text_color=COLOR_SUCCESS)
+    label_chrono.configure(text=t("misc.valide"), text_color=COLOR_SUCCESS)
+    label_statut.configure(text=t("misc.session_terminee_jeu"), text_color=COLOR_SUCCESS)
 
     duree_total = duree_heures * 60 + duree_minutes
     sauvegarder_stats(duree_total)
@@ -1682,20 +1696,18 @@ def _surveiller_processus():
                 soft_correction_countdown = 0
                 soft_correction_app = None
                 label_statut.configure(
-                    text=f"[SANCTION] {app_bloquee} fermé de force.",
+                    text=t("misc.sanction", app=app_bloquee),
                     text_color="#E63946")
                 root.after(2500, lambda: label_statut.configure(
                     text="", text_color=COLOR_TEXT_DIM))
             else:
                 label_statut.configure(
-                    text=f"⚠  {app_bloquee} — ferme-le toi-même dans "
-                         f"{soft_correction_countdown}s ou il sera fermé de force",
+                    text=t("misc.soft_correction_warn", app=app_bloquee, n=soft_correction_countdown),
                     text_color="orange")
         if session_cfg.get("hardcore") and soft_correction_active:
             _afficher_violation_hardcore(app_bloquee, soft_correction_countdown)
         else:
             _fermer_violation_hardcore()
-        _rafraichir_barre_session_bas()
         return True
     else:
         if soft_correction_active:
@@ -1703,11 +1715,10 @@ def _surveiller_processus():
             soft_correction_countdown = 0
             soft_correction_app = None
             label_statut.configure(
-                text="✓  Bonne décision — retour au focus", text_color="#7A9B5C")
+                text=t("misc.bonne_decision"), text_color="#7A9B5C")
             root.after(2000, lambda: label_statut.configure(
                 text="", text_color=COLOR_TEXT_DIM))
         _fermer_violation_hardcore()
-        _rafraichir_barre_session_bas()
         return False
 
 
@@ -1729,7 +1740,7 @@ def ouvrir_tunnel_honte():
     _tunnel_honte_ouvert = True      # suspend le vol de focus et le scan d'apps
 
     dlg = ctk.CTkToplevel(root)
-    dlg.title("Tunnel de la Honte")
+    dlg.title(t("tunnel.titre_fenetre"))
     dlg.overrideredirect(True)
     dlg.attributes("-topmost", True)
     dlg.configure(fg_color="#0A0908")
@@ -1747,7 +1758,7 @@ def ouvrir_tunnel_honte():
     centre = ctk.CTkFrame(dlg, fg_color="transparent")
     centre.place(relx=0.5, rely=0.5, anchor="center")
 
-    ctk.CTkLabel(centre, text="TUNNEL DE LA HONTE",
+    ctk.CTkLabel(centre, text=t("tunnel.titre_grand"),
                  font=("JetBrains Mono", 30, "bold"), text_color="#E63946").pack(pady=(0, 34))
 
     zone = ctk.CTkFrame(centre, fg_color="transparent")
@@ -1784,16 +1795,15 @@ def ouvrir_tunnel_honte():
     # ── Étape 3 : dernier avertissement ───────────────────────────────
     frame3 = ctk.CTkFrame(zone, fg_color="transparent")
     ctk.CTkLabel(frame3,
-                 text="Reviens au travail.\nPlus tu procrastines, plus il sera difficile\n"
-                      "d'arrêter de procrastiner.",
+                 text=t("tunnel.etape3_texte"),
                  font=("Segoe UI", 18), text_color="#B8AF9E", justify="center").pack(pady=(0, 30))
     nav3 = ctk.CTkFrame(frame3, fg_color="transparent")
     nav3.pack()
-    ctk.CTkButton(nav3, text="Je reviens  💪", width=240, height=54,
+    ctk.CTkButton(nav3, text=t("tunnel.je_reviens"), width=240, height=54,
                   font=("Segoe UI", 16, "bold"), corner_radius=3,
                   fg_color="#7A9B5C", hover_color="#5C7A46",
                   command=_fermer_retour).pack(side="left", padx=12)
-    ctk.CTkButton(nav3, text="J'abandonne", width=170, height=54,
+    ctk.CTkButton(nav3, text=t("tunnel.jabandonne"), width=170, height=54,
                   font=("Segoe UI", 13), corner_radius=3,
                   fg_color="#241012", hover_color="#A82230", text_color="#E63946",
                   border_width=1, border_color="#5C3A38",
@@ -1801,9 +1811,9 @@ def ouvrir_tunnel_honte():
 
     # ── Étape 2 : saisie de friction ──────────────────────────────────
     frame2 = ctk.CTkFrame(zone, fg_color="transparent")
-    ctk.CTkLabel(frame2, text="Pour continuer, écris exactement :",
+    ctk.CTkLabel(frame2, text=t("tunnel.etape2_consigne"),
                  font=("Segoe UI", 16), text_color="#8A8071").pack(pady=(0, 8))
-    ctk.CTkLabel(frame2, text="« Je suis faible »",
+    ctk.CTkLabel(frame2, text=t("tunnel.phrase_friction_affichee"),
                  font=("JetBrains Mono", 22, "bold"), text_color="#E63946").pack(pady=(0, 18))
     entry2 = ctk.CTkEntry(frame2, width=360, height=46, justify="center",
                           font=("JetBrains Mono", 16), fg_color="#160808",
@@ -1811,37 +1821,37 @@ def ouvrir_tunnel_honte():
     entry2.pack(pady=(0, 18))
     nav2 = ctk.CTkFrame(frame2, fg_color="transparent")
     nav2.pack()
-    btn_cont = ctk.CTkButton(nav2, text="Continuer", width=200, height=50,
+    btn_cont = ctk.CTkButton(nav2, text=t("tunnel.continuer"), width=200, height=50,
                              font=("Segoe UI", 14, "bold"), corner_radius=3,
                              fg_color="#5C3A38", hover_color="#5C3A38",
                              text_color="#8A8071", state="disabled",
                              command=lambda: _montrer(frame3))
     btn_cont.pack(side="left", padx=12)
-    ctk.CTkButton(nav2, text="← Je retourne au travail", width=240, height=50,
+    ctk.CTkButton(nav2, text=t("tunnel.retour_travail_court"), width=240, height=50,
                   font=("Segoe UI", 14, "bold"), corner_radius=3,
                   fg_color="#7A9B5C", hover_color="#5C7A46",
                   command=_fermer_retour).pack(side="left", padx=12)
 
     def _maj_saisie(e=None):
-        ok = entry2.get().strip().lower() == "je suis faible"
+        ok = entry2.get().strip().lower() == t("tunnel.phrase_friction")
         btn_cont.configure(state="normal" if ok else "disabled",
                            text_color="#EA5561" if ok else "#8A8071")
     entry2.bind("<KeyRelease>", _maj_saisie)
 
     # ── Étape 1 : confirmation + délai 60 s ───────────────────────────
     frame1 = ctk.CTkFrame(zone, fg_color="transparent")
-    ctk.CTkLabel(frame1, text="Tu veux vraiment abandonner ?",
+    ctk.CTkLabel(frame1, text=t("tunnel.etape1_titre"),
                  font=("Segoe UI", 22, "bold"), text_color="#E8DFCE").pack(pady=(0, 10))
     ctk.CTkLabel(frame1,
-                 text="Tu as pourtant un projet à finir\net des objectifs à atteindre.",
+                 text=t("tunnel.etape1_texte"),
                  font=("Segoe UI", 16), text_color="#8A8071", justify="center").pack(pady=(0, 26))
     nav1 = ctk.CTkFrame(frame1, fg_color="transparent")
     nav1.pack()
-    ctk.CTkButton(nav1, text="Non, je retourne au travail", width=290, height=56,
+    ctk.CTkButton(nav1, text=t("tunnel.non_retour"), width=290, height=56,
                   font=("Segoe UI", 16, "bold"), corner_radius=3,
                   fg_color="#7A9B5C", hover_color="#5C7A46",
                   command=_fermer_retour).pack(side="left", padx=12)
-    btn_oui = ctk.CTkButton(nav1, text="Oui, abandonner  (60)", width=220, height=56,
+    btn_oui = ctk.CTkButton(nav1, text=t("tunnel.oui_abandonner_compte", n=60), width=220, height=56,
                             font=("Segoe UI", 13), corner_radius=3,
                             fg_color="#241012", hover_color="#A82230",
                             text_color="#5C3A38", state="disabled",
@@ -1854,10 +1864,10 @@ def ouvrir_tunnel_honte():
             return
         _secs[0] -= 1
         if _secs[0] > 0:
-            btn_oui.configure(text=f"Oui, abandonner  ({_secs[0]})")
+            btn_oui.configure(text=t("tunnel.oui_abandonner_compte", n=_secs[0]))
             dlg.after(1000, _tick_oui)
         else:
-            btn_oui.configure(text="Oui, abandonner", state="normal", text_color="#E63946")
+            btn_oui.configure(text=t("tunnel.oui_abandonner"), state="normal", text_color="#E63946")
 
     # ── Navigation entre étapes ───────────────────────────────────────
     _frames = (frame1, frame2, frame3)
@@ -1898,9 +1908,9 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
     grade_rgb = hex2rgb(grade_col)
 
     # Verdict couleur
-    if "TOTALE" in verdict:
+    if verdict == t("rapport.verdict_totale"):
         verdict_rgb = GREEN
-    elif "INSUFFISANT" in verdict:
+    elif verdict == t("rapport.verdict_insuffisant"):
         verdict_rgb = (180, 120, 0)
     else:
         verdict_rgb = RED_ERR
@@ -1958,7 +1968,7 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
 
     # ── En-tête ──
     texte_centre(52, "B  E  F  R  E  E", f_title, (55, 55, 55))
-    texte_centre(100, "CERTIFICAT  DE  DISCIPLINE", f_sub, CRIMSON)
+    texte_centre(100, t("certificat.titre"), f_sub, CRIMSON)
 
     ligne_pointillee(148, MUTED)
 
@@ -1968,9 +1978,9 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
     ligne_pointillee(202, MUTED)
 
     # ── Objectif ──
-    draw.text((70, 216), "OBJECTIF", font=f_label, fill=DIM)
+    draw.text((70, 216), t("certificat.objectif_label"), font=f_label, fill=DIM)
     obj_txt = (objectif[:80] + "…") if len(objectif) > 80 else objectif
-    obj_affiche = f'"{obj_txt}"' if obj_txt.strip() else "— non renseigné —"
+    obj_affiche = f'"{obj_txt}"' if obj_txt.strip() else t("certificat.objectif_vide")
     texte_centre(240, obj_affiche, f_obj, (130, 130, 130))
 
     ligne_pointillee(282, MUTED)
@@ -1982,9 +1992,9 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
         return f"{h}h {m:02d}m" if h else f"{m}m {s:02d}s"
 
     cols = [
-        ("FOCUS ACTIF",  fmt_dur(duree_secs * ratio_pct / 100), WHITE),
-        ("COMPLIANCE",   f"{ratio_pct}%",                        verdict_rgb),
-        ("GRADE",        grade_nom.upper(),                       grade_rgb),
+        (t("certificat.focus_actif"),  fmt_dur(duree_secs * ratio_pct / 100), WHITE),
+        (t("certificat.compliance"),   f"{ratio_pct}%",                        verdict_rgb),
+        (t("certificat.grade"),        grade_nom.upper(),                       grade_rgb),
     ]
     col_xs = [180, 600, 980]
     for (lbl, val, col), cx in zip(cols, col_xs):
@@ -1999,27 +2009,25 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
     ligne_pointillee(390, MUTED)
 
     # ── Points gagnés + total ──
-    pts_txt   = f"+{pts_gagnes} pts gagnés cette session"
-    total_txt = f"{score_total} pts au total"
+    pts_txt   = t("certificat.pts_gagnes", n=pts_gagnes)
+    total_txt = t("certificat.pts_total", n=score_total)
     draw.text((70, 408),   pts_txt,   font=f_value, fill=GOLD)
     bb = draw.textbbox((0, 0), total_txt, font=f_value)
     draw.text((W - 70 - (bb[2]-bb[0]), 408), total_txt, font=f_value, fill=(70, 70, 70))
 
     # Petite info corrections
-    corr_txt = f"Soft-corrections : {nb_corrections}"
+    corr_txt = t("certificat.corrections", n=nb_corrections)
     draw.text((70, 446), corr_txt, font=f_small, fill=(35, 35, 35))
 
     ligne_pointillee(482, MUTED)
 
     # ── Date ──
-    mois = ["Janvier","Février","Mars","Avril","Mai","Juin",
-            "Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
     now = datetime.now()
-    date_txt = f"{now.day} {mois[now.month-1]} {now.year}"
+    date_txt = f"{now.day} {i18n.month_names()[now.month-1]} {now.year}"
     texte_centre(502, date_txt, f_label, (45, 45, 45))
 
     # ── Baseline ──
-    texte_centre(560, "befree  ·  discipline quotidienne  ·  chaque session compte", f_small, (22, 22, 22))
+    texte_centre(560, t("certificat.baseline"), f_small, (22, 22, 22))
 
     # ── Filigrane diagonal (très discret) ──
     try:
@@ -2044,9 +2052,9 @@ def generer_certificat(duree_secs, ratio_pct, nb_corrections,
     # ── Sauvegarde ──
     chemin = filedialog.asksaveasfilename(
         defaultextension=".png",
-        filetypes=[("Image PNG", "*.png"), ("Tous les fichiers", "*.*")],
+        filetypes=[(t("certificat.fichier_png"), "*.png"), (t("stats.fichier_tous"), "*.*")],
         initialfile=f"certificat_befree_{now.strftime('%Y%m%d_%H%M')}.png",
-        title="Enregistrer le Certificat de Discipline",
+        title=t("certificat.dialog_titre"),
     )
     if chemin:
         img.save(chemin, "PNG")
@@ -2067,11 +2075,11 @@ def afficher_rapport_discipline(duree_session_secs):
     ratio_pct = int(ratio * 100)
 
     if ratio >= seuil:
-        verdict, couleur_v = "DISCIPLINE TOTALE", "#7A9B5C"
+        verdict, couleur_v = t("rapport.verdict_totale"), "#7A9B5C"
     elif ratio >= seuil * 0.75:
-        verdict, couleur_v = "EFFORT INSUFFISANT", "#D4A24C"
+        verdict, couleur_v = t("rapport.verdict_insuffisant"), "#D4A24C"
     else:
-        verdict, couleur_v = "FOCUS DÉFAILLANT", "#E63946"
+        verdict, couleur_v = t("rapport.verdict_defaillant"), "#E63946"
 
     # ── Deep Work Score ──
     # On calcule AVANT d'ajouter pour détecter un changement de grade.
@@ -2091,14 +2099,14 @@ def afficher_rapport_discipline(duree_session_secs):
         return f"{h}h{m:02d}m{s:02d}s" if h else f"{m}m{s:02d}s"
 
     pop = ctk.CTkToplevel(root)
-    pop.title("Rapport de Discipline")
+    pop.title(t("rapport.titre_fenetre"))
     pop.resizable(False, False)
     pop.transient(root)
     pop.grab_set()
     pop.configure(fg_color="#0A0908")
     _centrer_popup(pop, 460, 470)
 
-    ctk.CTkLabel(pop, text="— RAPPORT DE DISCIPLINE —",
+    ctk.CTkLabel(pop, text=t("rapport.entete"),
                  font=("JetBrains Mono", 11, "bold"), text_color="#1F1B18").pack(pady=(18, 2))
     ctk.CTkLabel(pop, text=verdict,
                  font=("JetBrains Mono", 20, "bold"), text_color=couleur_v).pack(pady=(4, 14))
@@ -2109,10 +2117,10 @@ def afficher_rapport_discipline(duree_session_secs):
     frame_rows.pack(fill="x", padx=28, pady=(0, 10))
 
     for label, valeur, col in [
-        ("Temps de focus actif",       _fmt(secondes_focus),    "#7A9B5C"),
-        ("Temps de distraction",       _fmt(secondes_distraction), "#E63946"),
-        (f"Compliance  (cible ≥ {seuil_pct}%)", f"{ratio_pct}%",  couleur_v),
-        ("Corrections soft",           str(nb_soft_corrections), "#8A8071"),
+        (t("rapport.temps_focus"),       _fmt(secondes_focus),    "#7A9B5C"),
+        (t("rapport.temps_distraction"), _fmt(secondes_distraction), "#E63946"),
+        (t("rapport.compliance_cible", seuil=seuil_pct), f"{ratio_pct}%",  couleur_v),
+        (t("rapport.corrections_soft"),  str(nb_soft_corrections), "#8A8071"),
     ]:
         row = ctk.CTkFrame(frame_rows, fg_color="transparent")
         row.pack(fill="x", padx=14, pady=3)
@@ -2136,32 +2144,32 @@ def afficher_rapport_discipline(duree_session_secs):
 
     row_pts = ctk.CTkFrame(frame_score, fg_color="transparent")
     row_pts.pack(fill="x", padx=14, pady=(10, 4))
-    ctk.CTkLabel(row_pts, text="Points gagnés", font=("JetBrains Mono", 11),
+    ctk.CTkLabel(row_pts, text=t("rapport.points_gagnes"), font=("JetBrains Mono", 11),
                  text_color="#8A8071", anchor="w").pack(side="left")
-    ctk.CTkLabel(row_pts, text=f"+{pts_gagnes} pts", font=("JetBrains Mono", 12, "bold"),
+    ctk.CTkLabel(row_pts, text=t("rapport.pts_suffixe", n=pts_gagnes), font=("JetBrains Mono", 12, "bold"),
                  text_color="#D4A24C", anchor="e").pack(side="right")
 
     row_grade = ctk.CTkFrame(frame_score, fg_color="transparent")
     row_grade.pack(fill="x", padx=14, pady=(0, 4))
-    ctk.CTkLabel(row_grade, text="Grade actuel", font=("JetBrains Mono", 11),
+    ctk.CTkLabel(row_grade, text=t("rapport.grade_actuel"), font=("JetBrains Mono", 11),
                  text_color="#8A8071", anchor="w").pack(side="left")
-    ctk.CTkLabel(row_grade, text=f"{grade_nom}  ({score_apres} pts)",
+    ctk.CTkLabel(row_grade, text=t("rapport.grade_pts", nom=_grade_label(grade_nom), n=score_apres),
                  font=("JetBrains Mono", 12, "bold"),
                  text_color=grade_col, anchor="e").pack(side="right")
 
     if prochain_grade:
         row_next = ctk.CTkFrame(frame_score, fg_color="transparent")
         row_next.pack(fill="x", padx=14, pady=(0, 10))
-        ctk.CTkLabel(row_next, text="Prochain grade", font=("JetBrains Mono", 11),
+        ctk.CTkLabel(row_next, text=t("rapport.prochain_grade"), font=("JetBrains Mono", 11),
                      text_color="#5C574C", anchor="w").pack(side="left")
-        ctk.CTkLabel(row_next, text=f"{prochain_grade}  (encore {pts_manquants} pts)",
+        ctk.CTkLabel(row_next, text=t("rapport.prochain_grade_pts", nom=_grade_label(prochain_grade), n=pts_manquants),
                      font=("JetBrains Mono", 10), text_color="#5C574C", anchor="e").pack(side="right")
     else:
-        ctk.CTkLabel(frame_score, text="Grade maximum atteint",
+        ctk.CTkLabel(frame_score, text=t("rapport.grade_max"),
                      font=("JetBrains Mono", 10), text_color="#A82230").pack(pady=(0, 10))
 
     if nouveau_grade:
-        ctk.CTkLabel(pop, text=f"NOUVEAU GRADE : {grade_nom.upper()}",
+        ctk.CTkLabel(pop, text=t("rapport.nouveau_grade", nom=_grade_label(grade_nom).upper()),
                      font=("JetBrains Mono", 13, "bold"), text_color=grade_col).pack(pady=(0, 6))
 
     frame_btns_rapport = ctk.CTkFrame(pop, fg_color="transparent")
@@ -2181,14 +2189,14 @@ def afficher_rapport_discipline(duree_session_secs):
             objectif=contrat_objectif.strip() if contrat_objectif else "",
         )
 
-    ctk.CTkButton(frame_btns_rapport, text="CERTIFICAT", width=160, height=40,
+    ctk.CTkButton(frame_btns_rapport, text=t("rapport.btn_certificat"), width=160, height=40,
                   font=("JetBrains Mono", 12, "bold"),
                   fg_color="#16210F", hover_color="#1C2913",
                   border_width=1, border_color="#5C7A46",
                   text_color="#7A9B5C",
                   corner_radius=3, command=_exporter).pack(side="left", padx=(0, 8))
 
-    ctk.CTkButton(frame_btns_rapport, text="FERMER", width=160, height=40,
+    ctk.CTkButton(frame_btns_rapport, text=t("rapport.btn_fermer"), width=160, height=40,
                   font=("JetBrains Mono", 12, "bold"),
                   fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
                   corner_radius=3, command=pop.destroy).pack(side="left")
@@ -2207,19 +2215,19 @@ def tick():
         if idle_secs > INACTIVITY_LIMIT and not paused:
             paused = True
             label_statut.configure(
-                text="[SYS.STATUS: PAUSED - INACTIVITY DETECTED]",
+                text=t("tick.pause_inactivite"),
                 text_color="red")
         elif idle_secs <= 3 and paused:
             paused = False
             label_statut.configure(
-                text="Focus actif — repris automatiquement",
+                text=t("tick.reprise_auto"),
                 text_color="lightblue")
             root.after(3000, lambda: label_statut.configure(
                 text=label_statut.cget("text") if root.winfo_exists() else ""))
     elif paused:
         paused = False
         label_statut.configure(
-            text="Focus actif — YouTube détecté, pause neutralisée",
+            text=t("tick.youtube_neutralise"),
             text_color="lightblue")
         root.after(3000, lambda: label_statut.configure(
             text=label_statut.cget("text") if root.winfo_exists() else ""))
@@ -2256,19 +2264,19 @@ def tick_infini():
         if idle_secs > INACTIVITY_LIMIT and not paused:
             paused = True
             label_statut.configure(
-                text="[SYS.STATUS: PAUSED - INACTIVITY DETECTED]",
+                text=t("tick.pause_inactivite"),
                 text_color="red")
         elif idle_secs <= 3 and paused:
             paused = False
             label_statut.configure(
-                text="Focus actif — repris automatiquement",
+                text=t("tick.reprise_auto"),
                 text_color="lightblue")
             root.after(3000, lambda: label_statut.configure(
                 text=label_statut.cget("text") if root.winfo_exists() else ""))
     elif paused:
         paused = False
         label_statut.configure(
-            text="Focus actif — YouTube détecté, pause neutralisée",
+            text=t("tick.youtube_neutralise"),
             text_color="lightblue")
         root.after(3000, lambda: label_statut.configure(
             text=label_statut.cget("text") if root.winfo_exists() else ""))
@@ -2307,9 +2315,9 @@ def demarrer_pomodoro():
     soft_correction_countdown = 0
     nb_soft_corrections = 0
     label_chrono.configure(text="25:00", text_color=COLOR_ACCENT)
-    label_statut.configure(text="🍅 FOCUS — 25 minutes de concentration", text_color="lightblue")
+    label_statut.configure(text=t("misc.pomo_focus"), text_color="lightblue")
 
-    btn_terminer_infini.configure(text="🎯 Terminer la session",
+    btn_terminer_infini.configure(text=t("misc.pomo_terminer_btn"),
                                    command=terminer_pomodoro)
     btn_terminer_infini.pack(pady=(15, 0))
     btn_abandonner.pack_forget()
@@ -2342,19 +2350,19 @@ def _tick_pomodoro_corps():
         if idle_secs > INACTIVITY_LIMIT and not paused:
             paused = True
             label_statut.configure(
-                text="[SYS.STATUS: PAUSED - INACTIVITY DETECTED]",
+                text=t("tick.pause_inactivite"),
                 text_color="red")
         elif idle_secs <= 3 and paused:
             paused = False
             label_statut.configure(
-                text="Focus actif — repris automatiquement",
+                text=t("tick.reprise_auto"),
                 text_color="lightblue")
             root.after(3000, lambda: label_statut.configure(
                 text=label_statut.cget("text") if root.winfo_exists() else ""))
     elif paused:
         paused = False
         label_statut.configure(
-            text="Focus actif — YouTube détecté, pause neutralisée",
+            text=t("tick.youtube_neutralise"),
             text_color="lightblue")
         root.after(3000, lambda: label_statut.configure(
             text=label_statut.cget("text") if root.winfo_exists() else ""))
@@ -2380,13 +2388,13 @@ def _tick_pomodoro_corps():
             pomodoro_phase = "break"
             temps_restant = POMODORO_BREAK_SECS
             label_chrono.configure(text="05:00", text_color="#00AAFF")
-            label_statut.configure(text="☕ PAUSE — 5 minutes de récupération", text_color="#00AAFF")
+            label_statut.configure(text=t("misc.pomo_pause"), text_color="#00AAFF")
         else:
             # Pause terminée → retour au focus
             pomodoro_phase = "focus"
             temps_restant = POMODORO_FOCUS_SECS
             label_chrono.configure(text="25:00", text_color=COLOR_ACCENT)
-            label_statut.configure(text="🍅 FOCUS — 25 minutes de concentration", text_color="lightblue")
+            label_statut.configure(text=t("misc.pomo_focus"), text_color="lightblue")
         root.after(1000, tick_pomodoro)
         return
 
@@ -2413,8 +2421,8 @@ def terminer_pomodoro():
         if duree_min > 0.5:  # Au moins 30 secondes de focus utile
             sauvegarder_stats(duree_min)
 
-    label_chrono.configure(text="SESSION TERMINÉE", text_color=COLOR_SUCCESS)
-    label_statut.configure(text="Tu as complété ta session Pomodoro !", text_color=COLOR_SUCCESS)
+    label_chrono.configure(text=t("misc.pomo_session_terminee"), text_color=COLOR_SUCCESS)
+    label_statut.configure(text=t("misc.pomo_complete"), text_color=COLOR_SUCCESS)
     elapsed_pomo = int(time.time() - session_start_time) if session_start_time else POMODORO_FOCUS_SECS
     root.after(800, lambda: afficher_rapport_discipline(elapsed_pomo))
 
@@ -2441,9 +2449,9 @@ def terminer_session_infini():
     heures = chrono_secondes // 3600
     mins = (chrono_secondes % 3600) // 60
     secs = chrono_secondes % 60
-    label_chrono.configure(text="SESSION VALIDÉE !", text_color=COLOR_SUCCESS)
+    label_chrono.configure(text=t("misc.infini_validee"), text_color=COLOR_SUCCESS)
     label_statut.configure(
-        text=f"Tu as bossé {heures}h{mins:02d}min{secs:02d}s — bien joué !",
+        text=t("session.bosse", heures=heures, mins=mins, secs=secs),
         text_color=COLOR_SUCCESS
     )
     root.after(800, lambda: afficher_rapport_discipline(chrono_secondes))
@@ -2466,7 +2474,7 @@ def demarrer_infini():
     nb_soft_corrections = 0
     label_chrono.configure(text="00:00:00", text_color=("white", "white"))
     label_statut.configure(text="Focus actif — chrono infini", text_color="lightblue")
-    btn_terminer_infini.configure(text="🎯 Terminer la session",
+    btn_terminer_infini.configure(text=t("misc.pomo_terminer_btn"),
                                    command=terminer_session_infini)
     btn_terminer_infini.pack(pady=(15, 0))
     btn_abandonner.pack_forget()
@@ -2481,18 +2489,11 @@ def demarrer_infini():
 # =====================================================================
 
 def _session_verrouiller_fenetre():
-    """Garde BeFree visible en premier plan pendant une session.
-    En mode Hardcore (et quarantaine) la fenêtre reprend aussi le focus si on switche.
-    Configure aussi la sortie de session (bouton Abandonner + Alt-F4) selon le mode."""
-    root.attributes("-topmost", True)
-
-    if (_HC_ACTIF or session_cfg.get("mode") == "hardcore"
-            or session_cfg.get("type") == "quarantaine" or session_type == "quarantaine"):
-        # Hardcore uniquement : reprendre le focus si l'utilisateur quitte la fenêtre
-        root.bind("<FocusOut>", _on_focus_out_hardcore)
-    else:
-        root.unbind("<FocusOut>")
-
+    """Empêche la fermeture de BeFree pendant une session (bouton Abandonner +
+    Alt-F4 selon le mode). Ne force ni topmost ni reprise de focus : le blocage
+    des apps interdites est déjà assuré par _surveiller_processus() indépendamment
+    de la fenêtre active — l'utilisateur doit pouvoir travailler librement dans
+    ses applications autorisées (whitelist) sans que BeFree ne reprenne la main."""
     _config_sortie_session()
 
 
@@ -2535,16 +2536,16 @@ def _abandon_libre_confirmer():
         abandonner_session()
         return
     dlg = ctk.CTkToplevel(root)
-    dlg.title("Arrêter la session ?")
+    dlg.title(t("confirm_arret.titre_fenetre"))
     dlg.configure(fg_color="#0A0908")
     dlg.resizable(False, False)
     dlg.transient(root)
     dlg.grab_set()
     _centrer_popup(dlg, 380, 200)
 
-    ctk.CTkLabel(dlg, text="Tu veux vraiment arrêter ?",
+    ctk.CTkLabel(dlg, text=t("confirm_arret.titre"),
                  font=("Segoe UI", 16, "bold"), text_color="#E8DFCE").pack(pady=(34, 6))
-    ctk.CTkLabel(dlg, text="Ta session en cours sera terminée.",
+    ctk.CTkLabel(dlg, text=t("confirm_arret.texte"),
                  font=("Segoe UI", 11), text_color="#8A8071").pack(pady=(0, 24))
 
     nav = ctk.CTkFrame(dlg, fg_color="transparent")
@@ -2554,37 +2555,20 @@ def _abandon_libre_confirmer():
         dlg.destroy()
         abandonner_session()
 
-    ctk.CTkButton(nav, text="Non, je continue", width=160, height=42,
+    ctk.CTkButton(nav, text=t("confirm_arret.non"), width=160, height=42,
                   font=("Segoe UI", 13, "bold"), corner_radius=3,
                   fg_color="#7A9B5C", hover_color="#5C7A46",
                   command=dlg.destroy).pack(side="left", padx=8)
-    ctk.CTkButton(nav, text="Oui, arrêter", width=130, height=42,
+    ctk.CTkButton(nav, text=t("confirm_arret.oui"), width=130, height=42,
                   font=("Segoe UI", 12), corner_radius=3,
                   fg_color="#241012", hover_color="#A82230", text_color="#E63946",
                   command=_oui).pack(side="left", padx=8)
 
 
 def _session_deverrouiller_fenetre():
-    """Relâche le premier plan forcé à la fin de la session."""
+    """Relâche les blocages de sortie à la fin de la session."""
     root.attributes("-topmost", False)
-    root.unbind("<FocusOut>")
     root.unbind("<Alt-F4>")
-
-
-def _on_focus_out_hardcore(event):
-    """En mode Hardcore, ramène la fenêtre au premier plan après 200 ms.
-    Délai court pour ne pas bloquer les popups internes (Toplevel enfants)."""
-    if not timer_active:
-        return
-    # Pendant le Tunnel de la Honte : ne PAS voler le focus, sinon root passe devant
-    # l'overlay du tunnel → flickering entre la session et le tunnel.
-    if _tunnel_honte_ouvert:
-        return
-    def _lift():
-        if timer_active and not _tunnel_honte_ouvert:
-            root.lift()
-            root.focus_force()
-    root.after(200, _lift)
 
 
 # --- DÉMARRAGE ---
@@ -2705,7 +2689,7 @@ def afficher_popup_reactivation(temps_arret_sec=0):
     reactivation_popup_shown = True
 
     popup_react = ctk.CTkToplevel(root)
-    popup_react.title("Bunker réactivé")
+    popup_react.title(t("bunker.titre_fenetre"))
     popup_react.resizable(False, False)
     popup_react.transient(root)
     popup_react.grab_set()
@@ -2713,7 +2697,7 @@ def afficher_popup_reactivation(temps_arret_sec=0):
     _centrer_popup(popup_react, 520, 280)
 
     lbl_titre = ctk.CTkLabel(
-        popup_react, text="🔒  BUNKER RÉACTIVÉ",
+        popup_react, text=t("bunker.titre"),
         font=("Arial", 24, "bold"), text_color=COLOR_ACCENT
     )
     lbl_titre.pack(pady=(30, 12))
@@ -2725,17 +2709,9 @@ def afficher_popup_reactivation(temps_arret_sec=0):
             duree_txt = f"{h}h{m:02d}" if m else f"{h}h"
         else:
             duree_txt = f"{m} min"
-        msg = (
-            f"PC éteint pendant {duree_txt} — timer mis en pause.\n"
-            "Le temps perdu ne compte pas contre toi.\n"
-            "Le bunker est de retour, on continue !"
-        )
+        msg = t("bunker.msg_avec_duree", duree=duree_txt)
     else:
-        msg = (
-            "Le bunker est réactivé.\n"
-            "Votre objectif de productivité ne peut pas être esquivé.\n"
-            "Bon courage, on continue !"
-        )
+        msg = t("bunker.msg_defaut")
 
     lbl_msg = ctk.CTkLabel(
         popup_react, text=msg,
@@ -2744,7 +2720,7 @@ def afficher_popup_reactivation(temps_arret_sec=0):
     lbl_msg.pack(pady=(0, 25))
 
     btn_go = ctk.CTkButton(
-        popup_react, text="C'EST PARTI  🔥", width=200, height=45,
+        popup_react, text=t("bunker.btn_go"), width=200, height=45,
         font=("Arial", 16, "bold"),
         fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
         command=popup_react.destroy
@@ -2808,13 +2784,13 @@ def restaurer_session(etat):
         if pomodoro_phase == "focus":
             label_chrono.configure(text=f"{temps_restant // 60:02d}:{temps_restant % 60:02d}",
                                     text_color=COLOR_ACCENT)
-            label_statut.configure(text="🍅 FOCUS — 25 min de concentration (repris)", text_color="lightblue")
+            label_statut.configure(text=t("misc.pomo_focus_repris"), text_color="lightblue")
         else:
             label_chrono.configure(text=f"{temps_restant // 60:02d}:{temps_restant % 60:02d}",
                                     text_color="#00AAFF")
-            label_statut.configure(text="☕ PAUSE — 5 min de récupération (repris)", text_color="#00AAFF")
+            label_statut.configure(text=t("misc.pomo_pause_repris"), text_color="#00AAFF")
 
-        btn_terminer_infini.configure(text="🎯 Terminer la session", command=terminer_pomodoro)
+        btn_terminer_infini.configure(text=t("misc.pomo_terminer_btn"), command=terminer_pomodoro)
         btn_terminer_infini.pack(pady=(15, 0))
         btn_abandonner.pack_forget()
         montrer_ecran(ecran_session)
@@ -2835,7 +2811,7 @@ def restaurer_session(etat):
                                 text_color=("white", "white"))
         label_statut.configure(text="Focus actif — chrono infini (repris)",
                                 text_color="lightblue")
-        btn_terminer_infini.configure(text="🎯 Terminer la session", command=terminer_session_infini)
+        btn_terminer_infini.configure(text=t("misc.pomo_terminer_btn"), command=terminer_session_infini)
         btn_terminer_infini.pack(pady=(15, 0))
         btn_abandonner.pack_forget()
 
@@ -3060,7 +3036,11 @@ def verifier_mdp(mdp):
 
 def ouvrir_dialog_mdp(callback_ok, titre="Accès protégé",
                       message="Entrez le mot de passe :"):
-    """Popup de saisie de mot de passe. Appelle callback_ok() si correct."""
+    """Popup de saisie de mot de passe. Appelle callback_ok() si correct.
+    Défauts de titre/message volontairement laissés en français : les 3
+    appelants passent toujours titre/message explicitement (jamais exercés),
+    donc pas de t() ici — la valeur serait figée en français de toute façon
+    (évaluée à la définition de la fonction, avant que la langue ne soit lue)."""
     dialog = ctk.CTkToplevel(root)
     dialog.title(titre)
     dialog.resizable(False, False)
@@ -3092,11 +3072,11 @@ def ouvrir_dialog_mdp(callback_ok, titre="Accès protégé",
             dialog.destroy()
             callback_ok()
         else:
-            lbl_err.configure(text="Mot de passe incorrect.")
+            lbl_err.configure(text=t("mdp.incorrect"))
             entry_mdp.delete(0, "end")
 
     entry_mdp.bind("<Return>", _valider)
-    ctk.CTkButton(dialog, text="VALIDER", width=200, height=38,
+    ctk.CTkButton(dialog, text=t("mdp.btn_valider"), width=200, height=38,
                   font=("Segoe UI", 13, "bold"),
                   fg_color=COLOR_PRIMARY, hover_color=COLOR_PRIMARY_HOVER,
                   corner_radius=3, command=_valider).pack(pady=(8, 0))
@@ -3120,12 +3100,12 @@ def _dialog_nouveau_mdp(titre, intro, callback_success):
                  text_color=COLOR_TEXT_DIM).pack(pady=(0, 14))
 
     entry1 = ctk.CTkEntry(dialog, width=280, show="•",
-                           placeholder_text="Nouveau mot de passe",
+                           placeholder_text=t("mdp.nouveau_placeholder"),
                            fg_color="#141210", border_color="#2A2622",
                            text_color=COLOR_TEXT, font=("Segoe UI", 13))
     entry1.pack(pady=(0, 8))
     entry2 = ctk.CTkEntry(dialog, width=280, show="•",
-                           placeholder_text="Confirmer le mot de passe",
+                           placeholder_text=t("mdp.confirmer_placeholder"),
                            fg_color="#141210", border_color="#2A2622",
                            text_color=COLOR_TEXT, font=("Segoe UI", 13))
     entry2.pack(pady=(0, 8))
@@ -3138,10 +3118,10 @@ def _dialog_nouveau_mdp(titre, intro, callback_success):
     def _confirmer():
         p1, p2 = entry1.get().strip(), entry2.get().strip()
         if not p1:
-            lbl_err.configure(text="Le mot de passe ne peut pas être vide.")
+            lbl_err.configure(text=t("mdp.vide"))
             return
         if p1 != p2:
-            lbl_err.configure(text="Les mots de passe ne correspondent pas.")
+            lbl_err.configure(text=t("mdp.ne_correspond_pas"))
             entry1.delete(0, "end")
             entry2.delete(0, "end")
             return
@@ -3168,13 +3148,13 @@ def action_definir_mdp():
 def action_changer_mdp():
     def _apres_verif():
         _dialog_nouveau_mdp(
-            "Changer le mot de passe",
-            "Définissez votre nouveau mot de passe.",
+            t("mdp.changer_titre"),
+            t("mdp.changer_intro"),
             _refresh_mdp_section,
         )
     ouvrir_dialog_mdp(_apres_verif,
-                      titre="Vérification",
-                      message="Entrez l'ancien mot de passe :")
+                      titre=t("mdp.verification_titre"),
+                      message=t("mdp.verification_message"))
 
 
 def action_supprimer_mdp():
@@ -3185,8 +3165,8 @@ def action_supprimer_mdp():
         _refresh_mdp_section()
     if mot_de_passe_actif():
         ouvrir_dialog_mdp(_supprimer,
-                          titre="Suppression",
-                          message="Entrez le mot de passe pour le supprimer :")
+                          titre=t("mdp.suppression_titre"),
+                          message=t("mdp.suppression_message"))
     else:
         _supprimer()
 
@@ -3194,12 +3174,12 @@ def action_supprimer_mdp():
 def _refresh_mdp_section():
     """Met à jour l'affichage de la section mot de passe selon l'état actuel."""
     if mot_de_passe_actif():
-        lbl_mdp_statut.configure(text="🔒  Mot de passe actif", text_color="#7A9B5C")
+        lbl_mdp_statut.configure(text=t("mdp.actif"), text_color="#7A9B5C")
         btn_definir_mdp.pack_forget()
         btn_changer_mdp.pack(side="left", padx=5)
         btn_supprimer_mdp.pack(side="left", padx=5)
     else:
-        lbl_mdp_statut.configure(text="🔓  Aucun mot de passe", text_color=COLOR_TEXT_DIM)
+        lbl_mdp_statut.configure(text=t("mdp.aucun"), text_color=COLOR_TEXT_DIM)
         btn_changer_mdp.pack_forget()
         btn_supprimer_mdp.pack_forget()
         btn_definir_mdp.pack(side="left", padx=5)
@@ -3270,9 +3250,9 @@ def update_grade_accueil():
     score = get_score_total()
     nom, kanji, couleur = get_grade(score)
     prochain, manque = get_grade_suivant(score)
-    sous = (f"{score} pts · +{manque} pour {prochain}"
-            if prochain else f"{score} pts · MAX")
-    lbl_sidebar_grade_nom.configure(text=nom)
+    sous = (t("grade.progression", score=score, manque=manque, prochain=_grade_label(prochain))
+            if prochain else t("grade.max", score=score))
+    lbl_sidebar_grade_nom.configure(text=_grade_label(nom))
     lbl_sidebar_grade_pts.configure(text=sous)
     sidebar_grade_seal.configure(fg_color=couleur)
     lbl_sidebar_grade_icon.configure(text=kanji, text_color="#0A0908")
@@ -3523,7 +3503,7 @@ def _terminer_quarantaine():
     supprimer_etat()
     debloquer_sites()
     duree = int(time.time() - session_start_time) if session_start_time else 0
-    label_chrono.configure(text="QUARANTAINE TERMINÉE", text_color=COLOR_SUCCESS)
+    label_chrono.configure(text=t("quarantaine.terminee"), text_color=COLOR_SUCCESS)
     root.after(800, lambda: afficher_rapport_discipline(duree))
 
 
@@ -3534,7 +3514,7 @@ def ouvrir_popup_grade():
     nom_actuel, _kanji_actuel, _coul_actuel = get_grade(score)
 
     pop = ctk.CTkToplevel(root)
-    pop.title("Rangs")
+    pop.title(t("grade.fenetre_titre"))
     pop.resizable(False, False)
     pop.transient(root)
     pop.grab_set()
@@ -3545,11 +3525,11 @@ def ouvrir_popup_grade():
     cadre.pack(fill="both", expand=True, padx=28, pady=28)
 
     # ── En-tête ──
-    ctk.CTkLabel(cadre, text="Progression du grade",
+    ctk.CTkLabel(cadre, text=t("grade.popup_titre"),
                  font=theme_sumi.serif(28), text_color="#E8DFCE",
                  anchor="w").pack(fill="x")
     ctk.CTkLabel(cadre,
-                 text="Le grade progresse par points. Un abandon Hardcore peut te bloquer un mois entier.",
+                 text=t("grade.popup_desc"),
                  font=("Segoe UI", 12), text_color="#B8AF9E", anchor="w",
                  justify="left", wraplength=500).pack(fill="x", pady=(4, 20))
 
@@ -3557,7 +3537,8 @@ def ouvrir_popup_grade():
 
     for i, (seuil, nom, kanji, couleur) in enumerate(GRADES):
         seuil_haut = GRADES[i + 1][0] if i + 1 < len(GRADES) else None
-        plage = f"{seuil} – {seuil_haut} pts" if seuil_haut else f"{seuil}+ pts"
+        plage = (t("grade.plage_bornee", bas=seuil, haut=seuil_haut) if seuil_haut
+                 else t("grade.plage_ouverte", bas=seuil))
 
         est_actuel = (i == idx_actuel)
         est_ultime = (i == len(GRADES) - 1)
@@ -3592,19 +3573,19 @@ def ouvrir_popup_grade():
                      text_color=seal_fg).place(relx=0.5, rely=0.5, anchor="center")
 
         # RANG NN
-        ctk.CTkLabel(inner, text=f"RANG {i + 1:02d}", font=theme_sumi.mono(10),
+        ctk.CTkLabel(inner, text=t("grade.rang_num", n=i + 1), font=theme_sumi.mono(10),
                      text_color=seal_txt if est_ultime else ("#E63946" if est_actuel else "#8A8071"),
                      width=70, anchor="w").pack(side="left", padx=(16, 0))
 
         # Statut à droite
         if est_ultime:
-            statut, statut_col = "ULTIME", "#0A0908"
+            statut, statut_col = t("grade.statut_ultime"), "#0A0908"
         elif est_actuel:
-            statut, statut_col = "EN COURS", "#D4A24C"
+            statut, statut_col = t("grade.statut_en_cours"), "#D4A24C"
         elif atteint:
-            statut, statut_col = "TERMINÉ", "#7A9B5C"
+            statut, statut_col = t("grade.statut_termine"), "#7A9B5C"
         else:
-            statut, statut_col = "VERROUILLÉ", "#8A8071"
+            statut, statut_col = t("grade.statut_verrouille"), "#8A8071"
         ctk.CTkLabel(inner, text=statut, font=theme_sumi.mono(10),
                      text_color=statut_col, width=90, anchor="e").pack(side="right")
 
@@ -3619,10 +3600,10 @@ def ouvrir_popup_grade():
         nom_col = "#0A0908" if est_ultime else ("#E8DFCE" if (est_actuel or atteint) else "#B8AF9E")
         ligne_nom = ctk.CTkFrame(centre, fg_color="transparent")
         ligne_nom.pack(fill="x", anchor="w")
-        ctk.CTkLabel(ligne_nom, text=nom, font=theme_sumi.serif(20 if est_actuel else 18),
+        ctk.CTkLabel(ligne_nom, text=_grade_label(nom), font=theme_sumi.serif(20 if est_actuel else 18),
                      text_color=nom_col).pack(side="left")
         if est_actuel:
-            ctk.CTkLabel(ligne_nom, text="  ← ACTUEL", font=theme_sumi.mono(10),
+            ctk.CTkLabel(ligne_nom, text=t("grade.actuel_suffixe"), font=theme_sumi.mono(10),
                          text_color="#8A8071").pack(side="left")
             # barre de progression vers le rang suivant
             if seuil_haut:
@@ -3914,7 +3895,7 @@ def verifier_cle_usb():
 def _afficher_erreur_cle_usb(parent=None):
     """Popup courte : clé USB absente."""
     win = ctk.CTkToplevel(parent or root)
-    win.title("Clé USB requise")
+    win.title(t("usb.requise_titre"))
     win.resizable(False, False)
     win.transient(root)
     win.grab_set()
@@ -3922,13 +3903,13 @@ def _afficher_erreur_cle_usb(parent=None):
     _centrer_popup(win, 380, 190)
 
     cle = cle_usb_enregistree()
-    nom = cle["label"] if cle else "ta clé"
+    nom = cle["label"] if cle else t("usb.ta_cle_defaut")
 
-    ctk.CTkLabel(win, text="CLÉ USB ABSENTE",
+    ctk.CTkLabel(win, text=t("usb.absente"),
                  font=("JetBrains Mono", 14, "bold"), text_color="#E63946").pack(pady=(24, 6))
-    ctk.CTkLabel(win, text=f"Insère \"{nom}\" pour continuer.",
+    ctk.CTkLabel(win, text=t("usb.insere", nom=nom),
                  font=("JetBrains Mono", 11), text_color="#5C574C").pack()
-    ctk.CTkButton(win, text="OK", width=120, height=34,
+    ctk.CTkButton(win, text=t("usb.ok"), width=120, height=34,
                   font=("JetBrains Mono", 11, "bold"),
                   fg_color="#141210", hover_color="#28231F", text_color="#8A8071",
                   corner_radius=4, command=win.destroy).pack(pady=(20, 0))
@@ -3939,26 +3920,26 @@ def ouvrir_dialog_enregistrer_cle():
     usbs = lister_usb_connectes()
 
     win = ctk.CTkToplevel(root)
-    win.title("Enregistrer une clé USB")
+    win.title(t("usb.enregistrer_titre_fenetre"))
     win.resizable(False, False)
     win.transient(root)
     win.grab_set()
     win.configure(fg_color="#0A0908")
 
-    ctk.CTkLabel(win, text="CHOISIR LA CLÉ USB",
+    ctk.CTkLabel(win, text=t("usb.choisir"),
                  font=("JetBrains Mono", 13, "bold"), text_color="#8A8071").pack(pady=(22, 6))
-    ctk.CTkLabel(win, text="Branche ta clé puis clique dessus.",
+    ctk.CTkLabel(win, text=t("usb.branche"),
                  font=("JetBrains Mono", 10), text_color="#3A352E").pack(pady=(0, 14))
 
     if not usbs:
-        ctk.CTkLabel(win, text="Aucun USB amovible détecté.",
+        ctk.CTkLabel(win, text=t("usb.aucun_detecte"),
                      font=("JetBrains Mono", 11), text_color="#5C3A38").pack(pady=(0, 14))
         win.geometry("360x160")
         win.update_idletasks()
         x = root.winfo_x() + (root.winfo_width()  - 360) // 2
         y = root.winfo_y() + (root.winfo_height() - 160) // 2
         win.geometry(f"+{x}+{y}")
-        ctk.CTkButton(win, text="FERMER", width=120, height=32,
+        ctk.CTkButton(win, text=t("usb.fermer"), width=120, height=32,
                       font=("JetBrains Mono", 10), fg_color="#141210",
                       hover_color="#28231F", text_color="#8A8071",
                       corner_radius=4, command=win.destroy).pack(pady=(0, 16))
@@ -3998,14 +3979,14 @@ def _refresh_physical_lock_section():
     cle = cle_usb_enregistree()
     if cle:
         lbl_usb_statut.configure(
-            text=f"Clé enregistrée : {cle['label']}  (S/N {cle['serial']})",
+            text=t("usb.cle_enregistree", label=cle['label'], serial=cle['serial']),
             text_color="#7A9B5C")
         btn_supprimer_cle.pack(side="left", padx=4)
-        btn_enregistrer_cle.configure(text="Changer la clé")
+        btn_enregistrer_cle.configure(text=t("usb.changer_cle"))
     else:
-        lbl_usb_statut.configure(text="Aucune clé enregistrée.", text_color="#8A8071")
+        lbl_usb_statut.configure(text=t("parametres.usb_aucune_cle"), text_color="#8A8071")
         btn_supprimer_cle.pack_forget()
-        btn_enregistrer_cle.configure(text="Enregistrer une clé")
+        btn_enregistrer_cle.configure(text=t("parametres.usb_enregistrer"))
 
 
 def action_supprimer_cle():
@@ -4034,7 +4015,7 @@ def ouvrir_contrat():
     except Exception:
         num_session = 1
     session_cfg["num_session"] = num_session
-    lbl_contrat_meta.configure(text=f"CONTRAT DE TRAVAIL · SESSION #{num_session}")
+    lbl_contrat_meta.configure(text=t("contrat.meta", n=num_session))
     now = datetime.now()
     lbl_contrat_date.configure(text=now.strftime("%d·%m·%Y · %H:%M"))
     # Pré-remplir la signature avec le nom d'utilisateur Windows
@@ -4051,10 +4032,10 @@ def valider_contrat():
     signature = entry_signature.get().strip()
 
     if len(objectif) < 10:
-        lbl_contrat_err.configure(text="Décris ton objectif (10 caractères minimum).")
+        lbl_contrat_err.configure(text=t("contrat.err_objectif"))
         return
     if len(signature) < 2:
-        lbl_contrat_err.configure(text="Entre ton prénom pour signer le contrat.")
+        lbl_contrat_err.configure(text=t("contrat.err_signature"))
         return
 
     contrat_objectif = objectif
@@ -4201,6 +4182,16 @@ root.title("BeFree")
 root.iconbitmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons", "befree.ico"))
 root.configure(fg_color=BF_COLOR_BG)
 
+# Langue : décidée ICI, avant la construction de tout widget en dessous, pour
+# qu'aucun texte ne soit jamais construit dans la mauvaise langue. Premier
+# lancement (pas de clé "lang") → reste en français par défaut le temps de
+# cette session, l'écran de choix (fin du fichier, bloc LANCEMENT) relance
+# l'app juste après le choix pour repartir propre dès le premier widget.
+_cfg_langue_initiale = charger_config()
+if "lang" in _cfg_langue_initiale:
+    i18n.set_language(_cfg_langue_initiale["lang"])
+_PREMIER_LANCEMENT_LANGUE = "lang" not in _cfg_langue_initiale
+
 # ======================= SIDEBAR =======================
 sidebar_frame = ctk.CTkFrame(root, width=200, fg_color=BF_COLOR_SIDEBAR, corner_radius=0)
 sidebar_frame.pack(side="left", fill="y")
@@ -4238,7 +4229,7 @@ ctk.CTkLabel(_wordmark_row, text="BeFree", font=theme_sumi.serif(22),
 ctk.CTkLabel(_wordmark_row, text=".", font=theme_sumi.serif(22),
              text_color="#E63946").pack(side="left")
 
-ctk.CTkLabel(logo_frame, text="v3.2 — HARDCORE", font=theme_sumi.mono(8),
+ctk.CTkLabel(logo_frame, text=t("sidebar.version"), font=theme_sumi.mono(8),
              text_color="#8A8071").pack(pady=(2, 0))
 
 # ── Sections de navigation (icônes trait fin dessinées au runtime, fidèle au design) ──
@@ -4272,15 +4263,15 @@ def _sidebar_nav_item(page_id, libelle):
     return btn
 
 
-_sidebar_section_label("SESSION")
-_sidebar_nav_item("accueil", "Accueil")
-_sidebar_nav_item("demarrer", "Démarrer une session")
-_sidebar_nav_item("stats", "Statistiques")
+_sidebar_section_label(t("sidebar.section_session"))
+_sidebar_nav_item("accueil", t("sidebar.nav_accueil"))
+_sidebar_nav_item("demarrer", t("sidebar.nav_demarrer"))
+_sidebar_nav_item("stats", t("sidebar.nav_stats"))
 
-_sidebar_section_label("RÈGLES")
-_sidebar_nav_item("apps", "Applications autorisées")
-_sidebar_nav_item("sites", "Sites web autorisés")
-_sidebar_nav_item("parametres", "Paramètres")
+_sidebar_section_label(t("sidebar.section_regles"))
+_sidebar_nav_item("apps", t("sidebar.nav_apps"))
+_sidebar_nav_item("sites", t("sidebar.nav_sites"))
+_sidebar_nav_item("parametres", t("sidebar.nav_parametres"))
 
 # Pousse la carte grade + carte utilisateur tout en bas (mockup : le badge
 # de grade est le tout dernier élément de la sidebar)
@@ -4306,15 +4297,15 @@ lbl_sidebar_grade_icon.place(relx=0.5, rely=0.5, anchor="center")
 
 # Nom du grade (serif)
 lbl_sidebar_grade_nom = ctk.CTkLabel(
-    sidebar_grade_card, text="Apprenti",
+    sidebar_grade_card, text=t("grade.novice"),
     font=theme_sumi.serif(15), text_color="#E8DFCE",
     anchor="w",
 )
 lbl_sidebar_grade_nom.place(x=48, y=8)
 
-# Rang / points (mono)
+# Rang / points (mono) — écrasé immédiatement par update_grade_accueil() au démarrage
 lbl_sidebar_grade_pts = ctk.CTkLabel(
-    sidebar_grade_card, text="0 pts",
+    sidebar_grade_card, text="",
     font=theme_sumi.mono(8), text_color="#8A8071",
     anchor="w",
 )
@@ -4347,10 +4338,6 @@ content_frame.pack(side="right", fill="both", expand=True)
 # ======================= ÉCRAN 1 — ACCUEIL (dashboard, fidèle au mockup) ==
 ecran_accueil = ctk.CTkFrame(content_frame, fg_color="transparent")
 
-_JOURS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
-_MOIS_FR = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-            "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
-
 # ── Zone de contenu, calée en haut-gauche comme le mockup (padding 36/44) ──
 conteneur_accueil = ctk.CTkFrame(ecran_accueil, fg_color="transparent")
 conteneur_accueil.pack(fill="both", expand=True, padx=44, pady=(32, 20))
@@ -4360,7 +4347,7 @@ lbl_accueil_date = ctk.CTkLabel(conteneur_accueil, text="",
                                  anchor="w")
 lbl_accueil_date.pack(fill="x")
 
-lbl_accueil_bonjour = ctk.CTkLabel(conteneur_accueil, text="Bonjour.",
+lbl_accueil_bonjour = ctk.CTkLabel(conteneur_accueil, text=t("accueil.bonjour"),
                                     font=theme_sumi.serif(40, weight="semibold"),
                                     text_color="#E8DFCE", anchor="w")
 lbl_accueil_bonjour.pack(fill="x", pady=(6, 0))
@@ -4372,7 +4359,7 @@ lbl_accueil_sous_titre.pack(fill="x", pady=(4, 0))
 
 # ── Eyebrow de section unique (fidèle au mockup : un seul "CETTE SEMAINE"
 # au-dessus de la grille, pas un label répété par carte) ──
-ctk.CTkLabel(conteneur_accueil, text="CETTE SEMAINE", font=theme_sumi.mono(9),
+ctk.CTkLabel(conteneur_accueil, text=t("accueil.eyebrow_semaine"), font=theme_sumi.mono(9),
              text_color="#8A8071", anchor="w"
              ).pack(fill="x", pady=(26, 0))
 
@@ -4383,9 +4370,9 @@ _accueil_grid_bg.pack(fill="x", pady=(8, 0))
 
 _ACCUEIL_CARTES = (
     # (clé, titre, taille_police_valeur, largeur_relative)
-    ("semaine", "TEMPS FOCUS", 40, 16),
-    ("sessions", "SESSIONS", 32, 10),
-    ("serie", "SÉRIE", 32, 10),
+    ("semaine", t("accueil.carte_temps_focus"), 40, 16),
+    ("sessions", t("accueil.carte_sessions"), 32, 10),
+    ("serie", t("accueil.carte_serie"), 32, 10),
 )
 
 _accueil_stat_cells = {}
@@ -4409,7 +4396,7 @@ _accueil_actions.pack(fill="x", pady=(26, 0))
 
 btn_preparer = ctk.CTkButton(
     _accueil_actions,
-    text="Démarrer une session   ▶",
+    text=t("accueil.btn_demarrer"),
     font=theme_sumi.ui(14, "bold"),
     fg_color="#E8DFCE",
     hover_color="#D8CFC0",
@@ -4422,7 +4409,7 @@ btn_preparer.pack(side="left")
 
 btn_reprendre = ctk.CTkButton(
     _accueil_actions,
-    text="Reprendre la dernière",
+    text=t("accueil.btn_reprendre"),
     font=theme_sumi.ui(13),
     fg_color="transparent",
     hover_color="#1F1B18",
@@ -4437,9 +4424,9 @@ btn_reprendre.pack(side="left", padx=(14, 0))
 # ── Dernières sessions ──
 _accueil_recent_header = ctk.CTkFrame(conteneur_accueil, fg_color="transparent")
 _accueil_recent_header.pack(fill="x", pady=(34, 10))
-ctk.CTkLabel(_accueil_recent_header, text="Dernières sessions",
+ctk.CTkLabel(_accueil_recent_header, text=t("accueil.dernieres_sessions"),
              font=theme_sumi.serif(18), text_color="#E8DFCE").pack(side="left")
-_lbl_accueil_voir_tout = ctk.CTkLabel(_accueil_recent_header, text="→ Voir tout",
+_lbl_accueil_voir_tout = ctk.CTkLabel(_accueil_recent_header, text=t("accueil.voir_tout"),
                                        font=theme_sumi.mono(10), text_color="#8A8071",
                                        cursor="hand2")
 _lbl_accueil_voir_tout.pack(side="right")
@@ -4457,10 +4444,10 @@ def _accueil_jour_label(dt):
     delta = (aujourdhui - dt.date()).days
     heure = dt.strftime("%H:%M")
     if delta == 0:
-        return f"AUJOURD'HUI · {heure}"
+        return t("accueil.jour_aujourdhui", heure=heure)
     if delta == 1:
-        return f"HIER · {heure}"
-    return f"{_JOURS_FR[dt.weekday()][:3].upper()} · {heure}"
+        return t("accueil.jour_hier", heure=heure)
+    return f"{i18n.weekday_names()[dt.weekday()][:3].upper()} · {heure}"
 
 
 def rafraichir_accueil():
@@ -4468,10 +4455,10 @@ def rafraichir_accueil():
     sessions à partir des vraies données (stats_manager + auth)."""
     now = datetime.now()
     lbl_accueil_date.configure(
-        text=f"{_JOURS_FR[now.weekday()].upper()} · {now.day} {_MOIS_FR[now.month - 1].upper()} · {now.strftime('%H:%M')}")
+        text=f"{i18n.weekday_names()[now.weekday()].upper()} · {now.day} {i18n.month_names()[now.month - 1].upper()} · {now.strftime('%H:%M')}")
 
     prenom = _nom_utilisateur_local()
-    lbl_accueil_bonjour.configure(text=f"Bonjour, {prenom}." if prenom else "Bonjour.")
+    lbl_accueil_bonjour.configure(text=t("accueil.bonjour_prenom", prenom=prenom) if prenom else t("accueil.bonjour"))
 
     from stats_manager import charger_sessions
     toutes = charger_sessions()
@@ -4491,26 +4478,26 @@ def rafraichir_accueil():
     serie = stats_manager.get_winstreak()
 
     if nb_sessions_reel == 0:
-        sous_titre = "Aucune session cette semaine. Lance la première."
+        sous_titre = t("accueil.sous_titre_zero")
     elif nb_sessions_reel == 1:
-        sous_titre = "Une session cette semaine. Continue."
+        sous_titre = t("accueil.sous_titre_une")
     else:
-        sous_titre = f"{nb_sessions_reel} sessions cette semaine. Continue."
+        sous_titre = t("accueil.sous_titre_plusieurs", n=nb_sessions_reel)
     lbl_accueil_sous_titre.configure(text=sous_titre)
 
     _accueil_stat_cells["semaine"]["valeur"].configure(text=heures_semaine)
-    _accueil_stat_cells["semaine"]["legende"].configure(text="heures cumulées")
+    _accueil_stat_cells["semaine"]["legende"].configure(text=t("accueil.legende_heures"))
     _accueil_stat_cells["sessions"]["valeur"].configure(text=f"{nb_sessions_reel:02d}")
-    _accueil_stat_cells["sessions"]["legende"].configure(text="complétées")
+    _accueil_stat_cells["sessions"]["legende"].configure(text=t("accueil.legende_sessions"))
     _accueil_stat_cells["serie"]["valeur"].configure(text=f"{serie:02d}", text_color="#E63946")
-    _accueil_stat_cells["serie"]["legende"].configure(text="jours consécutifs")
+    _accueil_stat_cells["serie"]["legende"].configure(text=t("accueil.legende_serie"))
 
     for w in _accueil_recent_list.winfo_children():
         w.destroy()
 
     dernieres = sorted(toutes, key=lambda s: s.get("timestamp", ""), reverse=True)[:4]
     if not dernieres:
-        ctk.CTkLabel(_accueil_recent_list, text="Aucune session enregistrée pour l'instant.",
+        ctk.CTkLabel(_accueil_recent_list, text=t("accueil.aucune_session"),
                      font=theme_sumi.ui(12), text_color="#8A8071",
                      anchor="w").pack(fill="x", pady=14)
         return
@@ -4520,17 +4507,17 @@ def rafraichir_accueil():
             dt = datetime.fromisoformat(s["timestamp"])
         except Exception:
             continue
-        objectif = (s.get("objectif") or "").strip() or "Session focus"
+        objectif = (s.get("objectif") or "").strip() or t("accueil.objectif_defaut")
         duree = formater_duree(s.get("duree_minutes", 0))
         hardcore = bool(s.get("hardcore"))
         abandon = bool(s.get("abandon"))
 
         if abandon:
-            statut_texte, statut_couleur = "ABANDON", "#D4A24C"
+            statut_texte, statut_couleur = t("accueil.statut_abandon"), "#D4A24C"
         elif hardcore:
-            statut_texte, statut_couleur = "HARDCORE", "#E63946"
+            statut_texte, statut_couleur = t("accueil.statut_hardcore"), "#E63946"
         else:
-            statut_texte, statut_couleur = "TERMINÉE", "#7A9B5C"
+            statut_texte, statut_couleur = t("accueil.statut_terminee"), "#7A9B5C"
 
         row = ctk.CTkFrame(_accueil_recent_list, fg_color="transparent")
         row.pack(fill="x")
@@ -4561,8 +4548,8 @@ stats_dashboard = StatsDashboard(ecran_stats, stats_manager,
 def reinitialiser_donnees():
     """Vide stats.json et rafraîchit les graphiques."""
     reponse = messagebox.askyesno(
-        title="Confirmation",
-        message="Veuillez confirmer la réinitialisation complète de toutes vos données statistiques.\n\nCette action est irréversible.",
+        title=t("stats.confirm_titre"),
+        message=t("stats.confirm_reset"),
         icon="warning",
         parent=root,
     )
@@ -4573,16 +4560,16 @@ def reinitialiser_donnees():
         with open(STATS_FILE, "w") as f:
             json.dump([], f, indent=2)
     except Exception:
-        messagebox.showerror("Erreur",
-                             "Impossible d'écrire dans stats.json.",
+        messagebox.showerror(t("stats.erreur_titre"),
+                             t("stats.erreur_ecriture"),
                              parent=root)
         return
 
     stats_dashboard.update_dashboard(stats_dashboard.filter_active)
 
     messagebox.showinfo(
-        "Succès",
-        "Toutes les données ont été réinitialisées.",
+        t("stats.succes_titre"),
+        t("stats.succes_reset"),
         parent=root,
     )
 
@@ -4593,18 +4580,18 @@ def exporter_statistiques():
 
     sessions = charger_sessions()
     if not sessions:
-        messagebox.showinfo("Export",
-                            "Aucune donnée à exporter.",
+        messagebox.showinfo(t("stats.export_titre"),
+                            t("stats.export_aucune_donnee"),
                             parent=root)
         return
 
     chemin = filedialog.asksaveasfilename(
-        title="Exporter les statistiques",
+        title=t("stats.export_dialog_titre"),
         defaultextension=".json",
         filetypes=[
-            ("Fichier JSON", "*.json"),
-            ("Fichier CSV", "*.csv"),
-            ("Tous les fichiers", "*.*"),
+            (t("stats.fichier_json"), "*.json"),
+            (t("stats.fichier_csv"), "*.csv"),
+            (t("stats.fichier_tous"), "*.*"),
         ],
         initialfile="hardcore_focus_stats",
         parent=root,
@@ -4650,7 +4637,7 @@ ecran_parametres = ctk.CTkFrame(content_frame, fg_color="transparent")
 conteneur_param = ctk.CTkFrame(ecran_parametres, fg_color="transparent")
 conteneur_param.pack(fill="both", expand=True, padx=44, pady=(32, 20))
 
-titre_param = ctk.CTkLabel(conteneur_param, text="Réglages",
+titre_param = ctk.CTkLabel(conteneur_param, text=t("parametres.titre"),
                             font=theme_sumi.serif(30), text_color=COLOR_TEXT, anchor="w")
 titre_param.pack(fill="x")
 
@@ -4682,11 +4669,37 @@ def _param_row(titre, description=None):
     return droite
 
 
-# ═══════════════════════ COMPTE ═══════════════════════
-_param_section("COMPTE")
+# ═══════════════════════ LANGUE ═══════════════════════
+_param_section(t("parametres.section_langue"))
 
-_ctrl_mdp = _param_row("Protection par mot de passe",
-                        "Verrouille les paramètres. Confie le mot de passe à un proche pour une discipline ultime.")
+_ctrl_langue = _param_row(t("parametres.langue_titre"), t("parametres.langue_desc"))
+frame_langue_btns = ctk.CTkFrame(_ctrl_langue, fg_color="transparent")
+frame_langue_btns.pack()
+
+
+def _changer_langue(code):
+    cfg = charger_config()
+    cfg["lang"] = code
+    sauvegarder_config(cfg)
+    messagebox.showinfo(t("parametres.langue_titre"), t("parametres.langue_redemarrer"))
+
+
+for _code, _label in i18n.LANGUAGES:
+    ctk.CTkButton(
+        frame_langue_btns, text=_label,
+        font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
+        fg_color="#1F1B18" if _code != i18n.get_language() else "#E8DFCE",
+        hover_color="#28231F",
+        text_color="#8A8071" if _code != i18n.get_language() else "#0A0908",
+        border_width=0,
+        command=lambda c=_code: _changer_langue(c)
+    ).pack(side="left", padx=(0, 6))
+
+
+# ═══════════════════════ COMPTE ═══════════════════════
+_param_section(t("parametres.section_compte"))
+
+_ctrl_mdp = _param_row(t("parametres.mdp_titre"), t("parametres.mdp_desc"))
 lbl_mdp_statut = ctk.CTkLabel(_ctrl_mdp, text="",
                                 font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT_DIM)
 lbl_mdp_statut.pack(anchor="e", pady=(0, 4))
@@ -4695,21 +4708,21 @@ frame_mdp_btns = ctk.CTkFrame(_ctrl_mdp, fg_color="transparent")
 frame_mdp_btns.pack()
 
 btn_definir_mdp = ctk.CTkButton(
-    frame_mdp_btns, text="Définir un mot de passe",
+    frame_mdp_btns, text=t("parametres.mdp_definir"),
     font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
     fg_color="transparent", hover_color="#1F1B18",
     border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
     command=action_definir_mdp)
 
 btn_changer_mdp = ctk.CTkButton(
-    frame_mdp_btns, text="Changer",
+    frame_mdp_btns, text=t("parametres.btn_changer"),
     font=("Segoe UI", 12, "bold"), height=34, corner_radius=3, width=110,
     fg_color="transparent", hover_color="#1F1B18",
     border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
     command=action_changer_mdp)
 
 btn_supprimer_mdp = ctk.CTkButton(
-    frame_mdp_btns, text="Supprimer",
+    frame_mdp_btns, text=t("parametres.btn_supprimer"),
     font=("Segoe UI", 12, "bold"), height=34, corner_radius=3, width=100,
     fg_color="#241012", hover_color="#A82230",
     border_width=1, border_color="#A82230",
@@ -4718,10 +4731,10 @@ btn_supprimer_mdp = ctk.CTkButton(
 _refresh_mdp_section()
 
 # ═══════════════════════ APPLICATION ═══════════════════════
-_param_section("APPLICATION")
+_param_section(t("parametres.section_application"))
 
-_ctrl_demarrage = _param_row("Démarrage automatique",
-                              "Lancer BeFree au démarrage de Windows.")
+_ctrl_demarrage = _param_row(t("parametres.demarrage_titre"),
+                              t("parametres.demarrage_desc"))
 var_demarrage_auto = ctk.BooleanVar(value=fichier_demarrage_existe())
 
 def on_switch_demarrage():
@@ -4733,9 +4746,7 @@ switch_demarrage = ctk.CTkSwitch(_ctrl_demarrage, text="",
                                    command=on_switch_demarrage)
 switch_demarrage.pack()
 
-_ctrl_mz = _param_row("Mode Morning-Zero",
-                       "Bloque ton PC 30 min dès l'allumage entre 04h et 12h. "
-                       "Impossible de contourner — même au redémarrage.")
+_ctrl_mz = _param_row(t("parametres.mz_titre"), t("parametres.mz_desc"))
 var_mz = ctk.BooleanVar(value=morning_zero_est_actif())
 
 def on_switch_mz():
@@ -4749,9 +4760,8 @@ switch_mz = ctk.CTkSwitch(_ctrl_mz, text="",
                            command=on_switch_mz)
 switch_mz.pack()
 
-_ctrl_pl = _param_row("Physical Lock — Clé USB",
-                       "Seule ta clé USB physique peut ouvrir les Réglages et autoriser un abandon de session.")
-lbl_usb_statut = ctk.CTkLabel(_ctrl_pl, text="Aucune clé enregistrée.",
+_ctrl_pl = _param_row(t("parametres.usb_titre"), t("parametres.usb_desc"))
+lbl_usb_statut = ctk.CTkLabel(_ctrl_pl, text=t("parametres.usb_aucune_cle"),
                                 font=theme_sumi.mono(10), text_color="#8A8071")
 lbl_usb_statut.pack(anchor="e", pady=(0, 4))
 
@@ -4759,7 +4769,7 @@ frame_pl_btns = ctk.CTkFrame(_ctrl_pl, fg_color="transparent")
 frame_pl_btns.pack(anchor="e", pady=(0, 6))
 
 btn_enregistrer_cle = ctk.CTkButton(
-    frame_pl_btns, text="Enregistrer une clé",
+    frame_pl_btns, text=t("parametres.usb_enregistrer"),
     font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
     fg_color="transparent", hover_color="#1F1B18",
     border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
@@ -4767,7 +4777,7 @@ btn_enregistrer_cle = ctk.CTkButton(
 btn_enregistrer_cle.pack(side="left", padx=4)
 
 btn_supprimer_cle = ctk.CTkButton(
-    frame_pl_btns, text="Supprimer",
+    frame_pl_btns, text=t("parametres.btn_supprimer"),
     font=("Segoe UI", 12, "bold"), height=34, corner_radius=3, width=100,
     fg_color="#241012", hover_color="#A82230",
     border_width=1, border_color="#A82230",
@@ -4780,13 +4790,13 @@ def on_switch_pl():
     if var_physical_lock.get() and not cle_usb_enregistree():
         var_physical_lock.set(False)
         lbl_usb_statut.configure(
-            text="Enregistre d'abord une clé USB.", text_color="#B3822F")
+            text=t("parametres.usb_enregistre_dabord"), text_color="#B3822F")
         return
     cfg = charger_config()
     cfg["physical_lock_actif"] = var_physical_lock.get()
     sauvegarder_config(cfg)
 
-switch_pl = ctk.CTkSwitch(_ctrl_pl, text="Activer le Physical Lock",
+switch_pl = ctk.CTkSwitch(_ctrl_pl, text=t("parametres.usb_activer"),
                            font=("Segoe UI", 11), text_color=COLOR_TEXT_DIM,
                            variable=var_physical_lock,
                            progress_color="#E63946",
@@ -4795,18 +4805,16 @@ switch_pl.pack(anchor="e")
 
 _refresh_physical_lock_section()
 
-_ctrl_resume = _param_row("Persistance de session",
-                           "En cas de redémarrage, le bunker se réactive automatiquement. "
-                           "Les sessions inachevées sont toujours protégées.")
-ctk.CTkLabel(_ctrl_resume, text="AUTOMATIQUE", font=theme_sumi.mono(10),
+_ctrl_resume = _param_row(t("parametres.resume_titre"), t("parametres.resume_desc"))
+ctk.CTkLabel(_ctrl_resume, text=t("parametres.resume_valeur"), font=theme_sumi.mono(10),
              text_color="#7A9B5C").pack()
 
 # ═══════════════════════ DONNÉES ═══════════════════════
-_param_section("DONNÉES")
+_param_section(t("parametres.section_donnees"))
 
-_ctrl_export = _param_row("Exporter les statistiques", "Format CSV ou JSON, une ligne par session.")
+_ctrl_export = _param_row(t("parametres.export_titre"), t("parametres.export_desc"))
 btn_exporter = ctk.CTkButton(
-    _ctrl_export, text="Exporter",
+    _ctrl_export, text=t("parametres.btn_exporter"),
     font=("Segoe UI", 12, "bold"),
     fg_color="transparent", hover_color="#1F1B18",
     border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
@@ -4815,10 +4823,9 @@ btn_exporter = ctk.CTkButton(
 )
 btn_exporter.pack()
 
-_ctrl_reset = _param_row("Réinitialiser les statistiques",
-                          "Efface l'historique. Ton grade reste, ton mérite pas.")
+_ctrl_reset = _param_row(t("parametres.reset_titre"), t("parametres.reset_desc"))
 btn_reinitialiser = ctk.CTkButton(
-    _ctrl_reset, text="Réinitialiser",
+    _ctrl_reset, text=t("parametres.btn_reinitialiser"),
     font=("Segoe UI", 12, "bold"),
     fg_color="transparent", hover_color="#241012",
     border_width=1, border_color="#E63946", text_color="#E63946",
@@ -4828,7 +4835,7 @@ btn_reinitialiser = ctk.CTkButton(
 btn_reinitialiser.pack()
 
 # Version info
-v_info = ctk.CTkLabel(conteneur_param, text="BeFree v3.2 — HARDCORE",
+v_info = ctk.CTkLabel(conteneur_param, text=t("parametres.version_footer"),
                         font=theme_sumi.mono(9), text_color="#5C574C")
 v_info.pack(pady=(24, 0))
 
@@ -4917,17 +4924,17 @@ ecran_apps = ctk.CTkFrame(content_frame, fg_color="transparent")
 conteneur_apps_titre = ctk.CTkFrame(ecran_apps, fg_color="transparent")
 conteneur_apps_titre.pack(pady=(25, 5))
 
-titre_apps = ctk.CTkLabel(conteneur_apps_titre, text="Applications autorisées",
+titre_apps = ctk.CTkLabel(conteneur_apps_titre, text=t("whitelist_legacy.titre"),
                             font=theme_sumi.serif(28), text_color=COLOR_TEXT)
 titre_apps.pack()
 
 sous_titre_apps = ctk.CTkLabel(conteneur_apps_titre,
-                                 text="Coche les applications à autoriser pendant la session",
+                                 text=t("whitelist_legacy.sous_titre"),
                                  font=("Segoe UI", 11), text_color=COLOR_TEXT_DIM)
 sous_titre_apps.pack(pady=(0, 5))
 
 # Barre de recherche
-entry_recherche = ctk.CTkEntry(ecran_apps, placeholder_text="\uD83D\uDD0D  Rechercher une application...",
+entry_recherche = ctk.CTkEntry(ecran_apps, placeholder_text=t("whitelist_legacy.recherche_placeholder"),
                                  font=("Segoe UI", 12),
                                  fg_color="#141210", border_color="#2A2622",
                                  text_color=COLOR_TEXT,
@@ -4946,7 +4953,7 @@ scroll_apps.pack(fill="both", expand=True, padx=60, pady=(0, 5))
 frame_bas_apps = ctk.CTkFrame(ecran_apps, fg_color="transparent")
 frame_bas_apps.pack(pady=(5, 20))
 
-btn_retour_temps = ctk.CTkButton(frame_bas_apps, text="\u2190 Retour", width=120,
+btn_retour_temps = ctk.CTkButton(frame_bas_apps, text=t("common.retour"), width=120,
                                    font=("Segoe UI", 12), corner_radius=3,
                                    fg_color="#141210",
                                    hover_color="#28231F",
@@ -4954,7 +4961,7 @@ btn_retour_temps = ctk.CTkButton(frame_bas_apps, text="\u2190 Retour", width=120
                                    command=lambda: montrer_ecran(ecran_temps))
 btn_retour_temps.pack(side="left", padx=10)
 
-btn_demarrer_focus = ctk.CTkButton(frame_bas_apps, text="DÉMARRER LE FOCUS", width=280,
+btn_demarrer_focus = ctk.CTkButton(frame_bas_apps, text=t("whitelist_legacy.btn_demarrer"), width=280,
                                      font=("Segoe UI", 14, "bold"), corner_radius=3,
                                      fg_color="#A82230",
                                      hover_color="#A82230",
@@ -4994,7 +5001,7 @@ def _creer_ligne_app(nom, ctkim=None):
 
     def _sync_tag(*_):
         if var.get():
-            lbl_tag.configure(text="AUTORISÉE", text_color="#E63946")
+            lbl_tag.configure(text=t("whitelist_legacy.tag_autorisee"), text_color="#E63946")
             lbl_nom.configure(font=("Segoe UI", 12, "bold"))
         else:
             lbl_tag.configure(text="—", text_color="#8A8071")
@@ -5017,7 +5024,7 @@ for app_name in detected_apps:
     _creer_ligne_app(app_name)
     cb.pack(side="right", padx=(5, 0))
 
-rappel_apps = ctk.CTkLabel(scroll_apps, text="VS Code et Terminal : toujours autorisés",
+rappel_apps = ctk.CTkLabel(scroll_apps, text=t("whitelist_legacy.rappel"),
                               font=("Segoe UI", 10), text_color="#5C574C")
 rappel_apps.pack(pady=(6, 5))
 
@@ -5088,25 +5095,24 @@ conteneur_contrat.pack(fill="both", expand=True, padx=40, pady=36)
 
 # En-tête mono + titre serif
 lbl_contrat_meta = ctk.CTkLabel(conteneur_contrat,
-                                 text="CONTRAT DE TRAVAIL · SESSION #1",
+                                 text=t("contrat.meta", n=1),
                                  font=theme_sumi.mono(10), text_color="#8A8071",
                                  anchor="w")
 lbl_contrat_meta.pack(fill="x")
 
-ctk.CTkLabel(conteneur_contrat, text="Contrat de travail",
+ctk.CTkLabel(conteneur_contrat, text=t("contrat.titre"),
              font=theme_sumi.serif(40), text_color="#1A1613",
              anchor="w").pack(fill="x", pady=(4, 0))
 
 lbl_contrat_intro = ctk.CTkLabel(
     conteneur_contrat,
-    text="Ce n'est pas un contrat avec BeFree. C'est un contrat avec toi-même. "
-         "Après signature, tu ne pourras plus revenir en arrière avant la fin.",
+    text=t("contrat.intro"),
     font=("Segoe UI", 13), text_color="#4A4239", anchor="w",
     justify="left", wraplength=560)
 lbl_contrat_intro.pack(fill="x", pady=(10, 0))
 
 # Objectif
-ctk.CTkLabel(conteneur_contrat, text="QUE VAS-TU ACCOMPLIR ?",
+ctk.CTkLabel(conteneur_contrat, text=t("contrat.objectif_label"),
              font=theme_sumi.mono(10), text_color="#8A8071",
              anchor="w").pack(fill="x", pady=(20, 6))
 entry_objectif = ctk.CTkTextbox(
@@ -5122,13 +5128,13 @@ _contrat_sign_row.pack(fill="x", pady=(20, 0))
 
 _contrat_sign_left = ctk.CTkFrame(_contrat_sign_row, fg_color="transparent")
 _contrat_sign_left.pack(side="left", fill="x", expand=True)
-ctk.CTkLabel(_contrat_sign_left, text="SIGNATURE", font=theme_sumi.mono(10),
+ctk.CTkLabel(_contrat_sign_left, text=t("contrat.signature_label"), font=theme_sumi.mono(10),
              text_color="#8A8071", anchor="w").pack(fill="x")
 entry_signature = ctk.CTkEntry(
     _contrat_sign_left, height=42, width=240,
     font=theme_sumi.serif(20, italic=True),
     fg_color="#FBF8F1", border_color="#1A1613", border_width=1,
-    text_color="#1A1613", placeholder_text="Ton prénom...",
+    text_color="#1A1613", placeholder_text=t("contrat.signature_placeholder"),
     placeholder_text_color="#8A8071", corner_radius=0)
 entry_signature.pack(anchor="w", pady=(6, 0))
 lbl_contrat_date = ctk.CTkLabel(_contrat_sign_left, text="",
@@ -5154,14 +5160,14 @@ lbl_contrat_err.pack(fill="x", pady=(10, 0))
 frame_contrat_btns = ctk.CTkFrame(conteneur_contrat, fg_color="transparent")
 frame_contrat_btns.pack(fill="x", side="bottom")
 
-ctk.CTkButton(frame_contrat_btns, text="← Retour", width=120, height=40,
+ctk.CTkButton(frame_contrat_btns, text=t("common.retour"), width=120, height=40,
               font=theme_sumi.ui(12), corner_radius=0,
               fg_color="transparent", hover_color="#E3D6B8",
               border_width=1, border_color="#1A1613", text_color="#1A1613",
               command=lambda: (_ts_reset(), slide_vers(ecran_type_session, ecran_contrat))
               ).pack(side="left")
 
-ctk.CTkButton(frame_contrat_btns, text="Je m'engage   ▶", width=200, height=44,
+ctk.CTkButton(frame_contrat_btns, text=t("contrat.btn_engager"), width=200, height=44,
               font=theme_sumi.ui(14, "bold"), corner_radius=0,
               fg_color="#1A1613", hover_color="#0A0908", text_color="#F2E8D3",
               command=valider_contrat).pack(side="right")
@@ -5173,40 +5179,6 @@ ecran_session = ctk.CTkFrame(content_frame, fg_color="#0A0908")
 conteneur_session = ctk.CTkFrame(ecran_session, fg_color="transparent")
 conteneur_session.pack(fill="both", expand=True, padx=60, pady=40)
 
-# ── Barre du haut : point clignotant + régime/apps · début-fin ──
-_session_barre_haut = ctk.CTkFrame(conteneur_session, fg_color="transparent")
-_session_barre_haut.pack(fill="x")
-
-_session_point_frame = ctk.CTkFrame(_session_barre_haut, fg_color="transparent")
-_session_point_frame.pack(side="left")
-_session_point = ctk.CTkFrame(_session_point_frame, width=8, height=8, corner_radius=4,
-                               fg_color="#7A9B5C")
-_session_point.pack(side="left", pady=2)
-
-
-def _session_point_clignoter(_visible=[True]):
-    """Simule l'animation CSS caretBlink (1.6s, opacité 50%) — purement
-    visuel, indépendant de toute logique de session."""
-    _visible[0] = not _visible[0]
-    try:
-        _session_point.configure(fg_color="#7A9B5C" if _visible[0] else "#1C2913")
-    except Exception:
-        pass
-    root.after(800, _session_point_clignoter)
-
-
-_session_point_clignoter()
-
-lbl_session_focus_top = ctk.CTkLabel(_session_point_frame, text="",
-                                      font=theme_sumi.mono(10), text_color="#B8AF9E",
-                                      anchor="w")
-lbl_session_focus_top.pack(side="left", padx=(10, 0))
-
-lbl_session_debut_fin = ctk.CTkLabel(_session_barre_haut, text="",
-                                      font=theme_sumi.mono(10), text_color="#8A8071",
-                                      anchor="e")
-lbl_session_debut_fin.pack(side="right")
-
 # ── Zone centrale (expand, centrée) ──
 _session_centre = ctk.CTkFrame(conteneur_session, fg_color="transparent")
 _session_centre.pack(fill="both", expand=True)
@@ -5216,10 +5188,6 @@ label_objectif_session = ctk.CTkLabel(
     text_color="#B8AF9E", wraplength=640, justify="center")
 label_objectif_session.pack(pady=(0, 8))
 
-lbl_session_attribution = ctk.CTkLabel(_session_centre, text="",
-                                        font=theme_sumi.mono(10), text_color="#8A8071")
-lbl_session_attribution.pack()
-
 label_chrono = ctk.CTkLabel(_session_centre, text="--:--",
                               font=theme_sumi.mono(128), text_color=BF_COLOR_ACCENT_CRIMSON)
 label_chrono.pack(pady=(28, 0))
@@ -5228,27 +5196,20 @@ label_statut = ctk.CTkLabel(_session_centre, text="", font=("Segoe UI", 13),
                               text_color=COLOR_TEXT_DIM)
 label_statut.pack(pady=(8, 0))
 
-_session_chips = ctk.CTkFrame(_session_centre, fg_color="transparent")
-_session_chips.pack(pady=(32, 0))
-
-# ── Barre du bas : distractions/temps focus à gauche, actions à droite ──
+# ── Barre du bas : actions ──
 _session_barre_bas = ctk.CTkFrame(conteneur_session, fg_color="transparent")
 _session_barre_bas.pack(fill="x", side="bottom")
-
-lbl_session_bas_gauche = ctk.CTkLabel(_session_barre_bas, text="",
-                                       font=theme_sumi.mono(11), text_color="#B8AF9E")
-lbl_session_bas_gauche.pack(side="left")
 
 _session_actions = ctk.CTkFrame(_session_barre_bas, fg_color="transparent")
 _session_actions.pack(side="right")
 
-btn_terminer_infini = ctk.CTkButton(_session_actions, text="Terminer la session",
+btn_terminer_infini = ctk.CTkButton(_session_actions, text=t("session.terminer"),
                                       font=("Segoe UI", 14, "bold"), height=44,
                                       fg_color="#5C7A46", corner_radius=3,
                                       hover_color="#5C7A46",
                                       command=terminer_session_infini)
 
-btn_abandonner = ctk.CTkButton(_session_actions, text="Abandonner", width=200,
+btn_abandonner = ctk.CTkButton(_session_actions, text=t("session.abandonner"), width=200,
                                  font=("Segoe UI", 12), corner_radius=3,
                                  fg_color="#A82230", hover_color="#A82230",
                                  command=ouvrir_tunnel_honte)
@@ -5256,57 +5217,10 @@ btn_abandonner.pack()
 
 
 def _preparer_ecran_session():
-    """Peuple les éléments statiques de l'écran Session (régime, apps
-    surveillées, heure de début/fin) — appelé une fois au lancement/reprise
-    d'une session, avant montrer_ecran(ecran_session)."""
-    _mode_labels = {"libre": "LIBRE", "tunnel": "TUNNEL", "hardcore": "HARDCORE"}
-    _type_labels = {"infini": "INFINI", "pomodoro": "POMODORO", "fixe": "FIXE",
-                     "quarantaine": "QUARANTAINE"}
-    apps = session_cfg.get("whitelist_apps", []) or []
-    _mode = session_cfg.get("mode")
-    _typ = session_cfg.get("type")
-    if _mode and _typ:
-        nom_regime = f"{_mode_labels.get(_mode, _mode.upper())} · {_type_labels.get(_typ, _typ.upper())}"
-    else:
-        nom_regime = "SESSION"
-    lbl_session_focus_top.configure(
-        text=f"FOCUS · {nom_regime} · APPS SURVEILLÉES : {len(apps)}")
-
-    maintenant = datetime.now()
-    session_cfg["heure_debut"] = maintenant.strftime("%H:%M")
-    debut_txt = f"DÉBUT · {maintenant.strftime('%H:%M')}"
-    duree_min = session_cfg.get("duree_minutes")
-    if duree_min and session_cfg.get("type") not in ("quarantaine",):
-        fin = maintenant + timedelta(minutes=duree_min)
-        lbl_session_debut_fin.configure(text=f"{debut_txt} · FIN · {fin.strftime('%H:%M')}")
-    else:
-        lbl_session_debut_fin.configure(text=debut_txt)
-
-    prenom = _nom_utilisateur_local() or "Toi"
-    lbl_session_attribution.configure(
-        text=f"— {prenom.upper()} · {maintenant.strftime('%d·%m·%Y · %H:%M')}")
-
-    for w in _session_chips.winfo_children():
-        w.destroy()
-    for app_nom in apps[:8]:
-        ctk.CTkLabel(_session_chips, text=f"◇ {app_nom}", font=theme_sumi.mono(10),
-                     text_color="#B8AF9E", fg_color="transparent",
-                     corner_radius=0, padx=10, pady=6,
-                     ).pack(side="left", padx=(0, 10))
-
-    _rafraichir_barre_session_bas()
-
-
-def _rafraichir_barre_session_bas():
-    """Met à jour le compteur de distractions bloquées + temps focus (barre du
-    bas) — appelé après chaque scan de surveillance, ne modifie aucune logique
-    de session, uniquement l'affichage."""
-    try:
-        lbl_session_bas_gauche.configure(
-            text=f"◤ Distractions bloquées : {nb_soft_corrections} · "
-                 f"Temps focus : {formater_duree(secondes_focus / 60)}")
-    except Exception:
-        pass
+    """Enregistre l'heure de début de session (lue par l'écran de violation
+    Hardcore) — appelé une fois au lancement/reprise d'une session, avant
+    montrer_ecran(ecran_session)."""
+    session_cfg["heure_debut"] = datetime.now().strftime("%H:%M")
 
 # =====================================================================
 #           ÉCRAN TYPE DE SESSION — 4 régimes (fidèle au mockup)
@@ -5317,7 +5231,7 @@ _tm_inner = ctk.CTkFrame(ecran_type_mode, fg_color="transparent")
 _tm_inner.pack(fill="both", expand=True, padx=60, pady=(40, 30))
 
 # ── En-tête : étape + barre de progression (3/4) ──
-ctk.CTkLabel(_tm_inner, text="ÉTAPE 3 / 4 — MODE", font=theme_sumi.mono(10),
+ctk.CTkLabel(_tm_inner, text=t("type_session.etape1_eyebrow"), font=theme_sumi.mono(10),
              text_color="#8A8071", anchor="w").pack(fill="x")
 _tm_progress_bg = ctk.CTkFrame(_tm_inner, height=2, fg_color="#1F1B18", corner_radius=0)
 _tm_progress_bg.pack(fill="x", pady=(10, 0))
@@ -5326,9 +5240,9 @@ ctk.CTkFrame(_tm_progress_bg, height=2, fg_color="#E8DFCE", corner_radius=0).pla
     relx=0, rely=0, relwidth=0.75, relheight=1)
 
 # ── Titre centré ──
-ctk.CTkLabel(_tm_inner, text="Quel mode, aujourd'hui ?",
+ctk.CTkLabel(_tm_inner, text=t("type_session.etape1_titre"),
              font=theme_sumi.serif(32), text_color="#E8DFCE").pack(pady=(24, 0))
-ctk.CTkLabel(_tm_inner, text="Le mode fixe le niveau de protection contre toi-même.",
+ctk.CTkLabel(_tm_inner, text=t("type_session.etape1_soustitre"),
              font=("Segoe UI", 13), text_color="#B8AF9E").pack(pady=(2, 0))
 
 _ts_mode_var = [None]     # "libre" | "tunnel" | "hardcore"
@@ -5341,12 +5255,9 @@ for _i in range(3):
 
 # (mode, icône texte ou None [icône dessinée], titre, tag, description)
 _TS_MODES = [
-    ("libre", "◇", "Libre", "FLOW · SIMPLE",
-     "Aucune protection contre toi-même. Juste un chrono."),
-    ("tunnel", None, "Tunnel", "PROTECTION INTERMÉDIAIRE",
-     "Impossible d'abandonner sans passer par le Tunnel de la Honte."),
-    ("hardcore", "禅", "Hardcore", "IRRÉVOCABLE",
-     "Verrouillage total. Ni pause, ni annulation, quel que soit le type choisi ensuite."),
+    ("libre",    None, t("mode.libre_titre"),    t("mode.libre_tag"),    t("mode.libre_desc")),
+    ("tunnel",   None, t("mode.tunnel_titre"),   t("mode.tunnel_tag"),   t("mode.tunnel_desc")),
+    ("hardcore", None, t("mode.hardcore_titre"), t("mode.hardcore_tag"), t("mode.hardcore_desc")),
 ]
 
 
@@ -5389,7 +5300,7 @@ def _ts_construire_carte(parent, col, height, pad_pady, desc_font_size,
 
     if hc_badge is not None:
         _hc_bg, _hc_fg = hc_badge
-        ctk.CTkLabel(card, text="HARDCORE", font=theme_sumi.mono(9),
+        ctk.CTkLabel(card, text=t("common.hardcore_badge"), font=theme_sumi.mono(9),
                      fg_color=_hc_bg, text_color=_hc_fg, corner_radius=0
                      ).place(relx=1.0, x=-1, y=-1, anchor="ne")
 
@@ -5405,14 +5316,13 @@ def _ts_construire_carte(parent, col, height, pad_pady, desc_font_size,
                             fg_color="transparent", border_width=1, border_color=txt_main)
     ico_box.pack(anchor="w")
     ico_box.pack_propagate(False)
-    if icone_char is not None:
+    if isinstance(icone_char, str):
         ctk.CTkLabel(ico_box, text=icone_char, font=theme_sumi.serif(18),
                      text_color=txt_main).place(relx=0.5, rely=0.5, anchor="center")
-    else:
-        _tunnel_img = theme_sumi.tunnel_icon(txt_main)
-        _lbl_tunnel = ctk.CTkLabel(ico_box, image=_tunnel_img, text="")
-        _lbl_tunnel.image = _tunnel_img
-        _lbl_tunnel.place(relx=0.5, rely=0.5, anchor="center")
+    elif icone_char is not None:
+        _lbl_ico = ctk.CTkLabel(ico_box, image=icone_char, text="")
+        _lbl_ico.image = icone_char
+        _lbl_ico.place(relx=0.5, rely=0.5, anchor="center")
 
     ctk.CTkLabel(pad, text=titre, font=theme_sumi.serif(22),
                  text_color=txt_main, anchor="w").pack(fill="x", pady=(14, 0))
@@ -5439,6 +5349,8 @@ def _ts_construire_carte(parent, col, height, pad_pady, desc_font_size,
 
 for _idx, (_mode, _ico, _titre, _tag, _desc) in enumerate(_TS_MODES):
     _is_hc = (_mode == "hardcore")
+    _txt_mode = "#0A0908" if _is_hc else "#E8DFCE"
+    _ico_rendered = theme_sumi.card_icon(_mode, _txt_mode) if _ico is None else _ico
 
     def _make_mode_click(m):
         def _click(e=None):
@@ -5448,14 +5360,14 @@ for _idx, (_mode, _ico, _titre, _tag, _desc) in enumerate(_TS_MODES):
     _card, _sel_badge = _ts_construire_carte(
         parent=_tm_cartes_zone, col=_idx, height=220, pad_pady=24, desc_font_size=12,
         bg="#E63946" if _is_hc else "#141210", bd="#E63946" if _is_hc else "#2A2622",
-        txt_main="#0A0908" if _is_hc else "#E8DFCE",
+        txt_main=_txt_mode,
         txt_tag="#0A0908" if _is_hc else "#8A8071",
         txt_desc="#0A0908" if _is_hc else "#B8AF9E",
-        icone_char=_ico, titre=_titre, tag=_tag, desc=_desc, pts=None, pts_color=None,
+        icone_char=_ico_rendered, titre=_titre, tag=_tag, desc=_desc, pts=None, pts_color=None,
         hc_badge=("#0A0908", "#E63946") if _is_hc else None,
         sel_badge_bg="#0A0908" if _is_hc else "#E63946",
         sel_badge_fg="#E63946" if _is_hc else "#0A0908",
-        sel_badge_text="✓ SÉLECTIONNÉ" if _is_hc else "SÉLECTIONNÉ",
+        sel_badge_text=t("common.selectionne_coche") if _is_hc else t("common.selectionne"),
         on_click=_make_mode_click(_mode))
     _ts_mode_refs[_mode] = {"card": _card, "sel_badge": _sel_badge}
 
@@ -5485,14 +5397,14 @@ def _ts_continuer_mode():
 _tm_nav = ctk.CTkFrame(_tm_inner, fg_color="transparent")
 _tm_nav.pack(side="bottom", fill="x", pady=(0, 0))
 
-ctk.CTkButton(_tm_nav, text="← Retour", width=130, height=40,
+ctk.CTkButton(_tm_nav, text=t("common.retour"), width=130, height=40,
               font=theme_sumi.ui(12), corner_radius=3,
               fg_color="transparent", hover_color="#1F1B18",
               border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
               command=lambda: slide_vers(ecran_accueil, ecran_type_mode)
               ).pack(side="left")
 
-btn_tm_suivant = ctk.CTkButton(_tm_nav, text="Suivant   ▶", width=180, height=40,
+btn_tm_suivant = ctk.CTkButton(_tm_nav, text=t("common.suivant"), width=180, height=40,
                                 font=theme_sumi.ui(14, "bold"), corner_radius=3,
                                 fg_color="#1F1B18", hover_color="#1F1B18",
                                 text_color="#5C574C", state="disabled",
@@ -5508,7 +5420,7 @@ _ts_inner = ctk.CTkFrame(ecran_type_session, fg_color="transparent")
 _ts_inner.pack(fill="both", expand=True, padx=60, pady=(40, 30))
 
 # ── En-tête : étape + barre de progression (toujours pleine, étape 4/4) ──
-ctk.CTkLabel(_ts_inner, text="ÉTAPE 4 / 4 — TYPE", font=theme_sumi.mono(10),
+ctk.CTkLabel(_ts_inner, text=t("type_session.etape2_eyebrow"), font=theme_sumi.mono(10),
              text_color="#8A8071", anchor="w").pack(fill="x")
 _ts_progress_bg = ctk.CTkFrame(_ts_inner, height=2, fg_color="#1F1B18", corner_radius=0)
 _ts_progress_bg.pack(fill="x", pady=(10, 0))
@@ -5517,7 +5429,7 @@ ctk.CTkFrame(_ts_progress_bg, height=2, fg_color="#E8DFCE", corner_radius=0).pla
     relx=0, rely=0, relwidth=1.0, relheight=1)
 
 # ── Titre centré + sous-titre dynamique (texte/couleur selon le mode) ──
-ctk.CTkLabel(_ts_inner, text="Quel type de session ?",
+ctk.CTkLabel(_ts_inner, text=t("type_session.etape2_titre"),
              font=theme_sumi.serif(32), text_color="#E8DFCE").pack(pady=(24, 0))
 _ts_soustitre = ctk.CTkLabel(_ts_inner, text="", font=("Segoe UI", 13, "italic"),
                               text_color="#B8AF9E")
@@ -5532,15 +5444,14 @@ _ts_type_refs  = {}       # type → {"card":..., "sel_badge":...}
 
 # (type, icône, titre, tag, description, points)
 _TS_TYPES = {
-    "infini":      ("∞", "Infini",      "SANS MINUTEUR",
-                    "Le chronomètre monte au lieu de descendre.", "+ 3 PTS / HEURE"),
-    "pomodoro":    ("◐", "Pomodoro",    "25 / 5 · CYCLIQUE",
-                    "4 cycles de 25 min, 5 min de pause.", "+ 2 PTS / CYCLE"),
-    "fixe":        ("◇", "Durée Fixe",  "FLOW · SIMPLE",
-                    "Une session, une durée. Rien d'autre.", "+ 1 PT / 30 MIN"),
-    "quarantaine": ("禅", "Quarantaine", "IRRÉVOCABLE · MULTI-JOURS",
-                    ".exe distraction en quarantaine sur disque. Non annulable.",
-                    "+ 10 PTS / JOUR TENU"),
+    "infini":      ("∞", t("type.infini_titre"), t("type.infini_tag"),
+                    t("type.infini_desc"), t("type.infini_pts")),
+    "pomodoro":    ("◐", t("type.pomodoro_titre"), t("type.pomodoro_tag"),
+                    t("type.pomodoro_desc"), t("type.pomodoro_pts")),
+    "fixe":        (None, t("type.fixe_titre"), t("type.fixe_tag"),
+                    t("type.fixe_desc"), t("type.fixe_pts")),
+    "quarantaine": ("禅", t("type.quarantaine_titre"), t("type.quarantaine_tag"),
+                    t("type.quarantaine_desc"), t("type.quarantaine_pts")),
 }
 
 # mode → types proposés à l'étape 2, dans l'ordre d'affichage
@@ -5551,9 +5462,9 @@ _TS_MODE_TYPES = {
 }
 
 _TS_SOUSTITRES = {
-    "libre":    ("Mode Libre — aucun engagement irrévocable.", "#B8AF9E"),
-    "tunnel":   ("Mode Tunnel — abandon impossible sans passer par le Tunnel de la Honte.", "#B8AF9E"),
-    "hardcore": ("Mode Hardcore — chaque type ci-dessous porte un verrouillage irrévocable.", "#E63946"),
+    "libre":    (t("mode.soustitre_libre"), "#B8AF9E"),
+    "tunnel":   (t("mode.soustitre_tunnel"), "#B8AF9E"),
+    "hardcore": (t("mode.soustitre_hardcore"), "#E63946"),
 }
 
 _ts_cartes_holder = ctk.CTkFrame(_ts_inner, fg_color="transparent")
@@ -5568,9 +5479,9 @@ def _ts_selectionner_type(typ):
     _ts_type_var[0] = typ
     mode = session_cfg.get("mode")
     is_hardcore = (mode == "hardcore")
-    for t, refs in _ts_type_refs.items():
-        selected = (t == typ)
-        pleine = is_hardcore and t == "quarantaine"
+    for typ_key, refs in _ts_type_refs.items():
+        selected = (typ_key == typ)
+        pleine = is_hardcore and typ_key == "quarantaine"
         if is_hardcore:
             refs["card"].configure(border_width=1, border_color="#E63946")
         else:
@@ -5609,7 +5520,7 @@ def _ts_construire_cartes_type(mode):
     btn_ts_demarrer.configure(
         state="disabled", fg_color="#1F1B18", hover_color="#1F1B18",
         text_color="#5C574C",
-        text="Entrer en Hardcore   ▶" if is_hardcore else "Démarrer   ▶")
+        text=t("common.entrer_hardcore") if is_hardcore else t("common.demarrer"))
 
     txt, col = _TS_SOUSTITRES.get(mode, _TS_SOUSTITRES["libre"])
     _ts_soustitre.configure(text=txt, text_color=col)
@@ -5623,27 +5534,29 @@ def _ts_construire_cartes_type(mode):
     for idx, typ in enumerate(types_du_mode):
         _ico, _titre, _tag, _desc, _pts = _TS_TYPES[typ]
         if is_hardcore and typ in ("pomodoro", "fixe"):
-            _desc = _desc + " Verrouillage Hardcore actif — abandon impossible avant la fin."
+            _desc = _desc + t("type.suffixe_hardcore")
         _pleine = is_hardcore and typ == "quarantaine"
+        _txt_typ = "#0A0908" if _pleine else "#E8DFCE"
+        _ico_rendered = theme_sumi.card_icon(typ, _txt_typ) if _ico is None else _ico
 
-        def _make_type_click(t):
+        def _make_type_click(typ_key):
             def _click(e=None):
-                _ts_selectionner_type(t)
+                _ts_selectionner_type(typ_key)
             return _click
 
         _card, _sel_badge = _ts_construire_carte(
             parent=_ts_cartes_zone, col=idx, height=230, pad_pady=22, desc_font_size=11,
             bg="#E63946" if _pleine else "#141210",
             bd="#E63946" if is_hardcore else "#2A2622",
-            txt_main="#0A0908" if _pleine else "#E8DFCE",
+            txt_main=_txt_typ,
             txt_tag="#0A0908" if _pleine else ("#E63946" if is_hardcore else "#8A8071"),
             txt_desc="#0A0908" if _pleine else "#B8AF9E",
-            icone_char=_ico, titre=_titre, tag=_tag, desc=_desc,
+            icone_char=_ico_rendered, titre=_titre, tag=_tag, desc=_desc,
             pts=_pts, pts_color="#0A0908" if _pleine else "#E63946",
             hc_badge=(("#0A0908", "#E63946") if _pleine else ("#E63946", "#0A0908")) if is_hardcore else None,
             sel_badge_bg="#0A0908" if _pleine else "#E63946",
             sel_badge_fg="#E63946" if _pleine else "#0A0908",
-            sel_badge_text="✓ SÉLECTIONNÉ" if is_hardcore else "SÉLECTIONNÉ",
+            sel_badge_text=t("common.selectionne_coche") if is_hardcore else t("common.selectionne"),
             on_click=_make_type_click(typ))
         _ts_type_refs[typ] = {"card": _card, "sel_badge": _sel_badge}
 
@@ -5701,23 +5614,23 @@ def _ts_afficher_param(typ):
         e.configure(border_color=entree_bordure)
 
     if typ == "fixe":
-        _ts_param_label.configure(text="PARAMÈTRE — DURÉE FIXE")
-        _ts_param_hint.configure(text="Durée totale de la session.")
+        _ts_param_label.configure(text=t("param.duree_fixe_titre"))
+        _ts_param_hint.configure(text=t("param.duree_fixe_desc"))
         _ts_param_entry_fixe.pack(side="left")
-        _ts_param_unite.configure(text="minutes")
+        _ts_param_unite.configure(text=t("param.duree_fixe_unite"))
     elif typ == "pomodoro":
-        _ts_param_label.configure(text="PARAMÈTRE — POMODORO")
-        _ts_param_hint.configure(text="Nombre de cycles avant la pause longue.")
+        _ts_param_label.configure(text=t("param.pomodoro_titre"))
+        _ts_param_hint.configure(text=t("param.pomodoro_desc"))
         _ts_param_entry_pomo.pack(side="left")
-        _ts_param_unite.configure(text="cycles")
+        _ts_param_unite.configure(text=t("param.pomodoro_unite"))
     elif typ == "quarantaine":
-        _ts_param_label.configure(text="PARAMÈTRE — QUARANTAINE")
-        _ts_param_hint.configure(text="Durée de quarantaine. Non modifiable une fois lancée.")
+        _ts_param_label.configure(text=t("param.quarantaine_titre"))
+        _ts_param_hint.configure(text=t("param.quarantaine_desc"))
         _ts_param_entry_quar.pack(side="left")
-        _ts_param_unite.configure(text="jours")
+        _ts_param_unite.configure(text=t("param.quarantaine_unite"))
     else:  # infini
-        _ts_param_label.configure(text="AUCUN PARAMÈTRE")
-        _ts_param_hint.configure(text="Le chrono monte jusqu'à ce que tu arrêtes")
+        _ts_param_label.configure(text=t("param.aucun_titre"))
+        _ts_param_hint.configure(text=t("param.aucun_desc"))
         _ts_param_unite.configure(text="")
     _ts_param_zone.pack(pady=(20, 0))
 
@@ -5726,7 +5639,7 @@ def _ts_reset():
     """Remet l'étape 2 (type) à zéro — sans toucher au mode choisi à l'étape 1."""
     _ts_type_var[0] = None
     is_hardcore = (session_cfg.get("mode") == "hardcore")
-    for t, refs in _ts_type_refs.items():
+    for typ_key, refs in _ts_type_refs.items():
         refs["card"].configure(border_width=1, border_color="#E63946" if is_hardcore else "#2A2622")
         if refs["sel_badge"] is not None:
             refs["sel_badge"].place_forget()
@@ -5760,7 +5673,7 @@ def _ts_appliquer_et_continuer():
     except Exception:
         num_session = 1
     session_cfg["num_session"] = num_session
-    lbl_contrat_meta.configure(text=f"CONTRAT DE TRAVAIL · SESSION #{num_session}")
+    lbl_contrat_meta.configure(text=t("contrat.meta", n=num_session))
     if session_cfg["hardcore"]:
         ouvrir_confirmation()
     else:
@@ -5778,14 +5691,14 @@ def _ts_continuer():
 _ts_nav = ctk.CTkFrame(_ts_inner, fg_color="transparent")
 _ts_nav.pack(side="bottom", fill="x", pady=(0, 0))
 
-ctk.CTkButton(_ts_nav, text="← Retour", width=130, height=40,
+ctk.CTkButton(_ts_nav, text=t("common.retour"), width=130, height=40,
               font=theme_sumi.ui(12), corner_radius=3,
               fg_color="transparent", hover_color="#1F1B18",
               border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
               command=lambda: slide_vers(ecran_type_mode, ecran_type_session)
               ).pack(side="left")
 
-btn_ts_demarrer = ctk.CTkButton(_ts_nav, text="Démarrer   ▶", width=200, height=40,
+btn_ts_demarrer = ctk.CTkButton(_ts_nav, text=t("common.demarrer"), width=200, height=40,
                                  font=theme_sumi.ui(14, "bold"), corner_radius=3,
                                  fg_color="#1F1B18", hover_color="#1F1B18",
                                  text_color="#5C574C", state="disabled",
@@ -5956,17 +5869,17 @@ def _wl_construire(first_session: bool, wl_sauvegardee: dict):
 
     # ── Titre ──
     ctk.CTkLabel(ecran_whitelist_nouveau,
-                 text="Applications autorisées",
+                 text=t("whitelist_legacy.titre"),
                  font=theme_sumi.serif(20), text_color="#E8DFCE").pack(pady=(18, 2))
     ctk.CTkLabel(ecran_whitelist_nouveau,
-                 text="Coche les applications à autoriser pendant la session",
+                 text=t("whitelist_legacy.sous_titre"),
                  font=("Segoe UI", 10), text_color="#8A8071").pack(pady=(0, 8))
 
     # ── Barre de recherche ──
     search_var = ctk.StringVar()
     ctk.CTkEntry(ecran_whitelist_nouveau,
                  textvariable=search_var,
-                 placeholder_text="  Rechercher...",
+                 placeholder_text=t("whitelist_new.recherche_placeholder"),
                  height=34, corner_radius=3,
                  fg_color="#141210", border_color="#28231F",
                  text_color="#B8AF9E",
@@ -6034,13 +5947,13 @@ def _wl_construire(first_session: bool, wl_sauvegardee: dict):
     nav = ctk.CTkFrame(ecran_whitelist_nouveau, fg_color="transparent")
     nav.pack(pady=(8, 14))
 
-    ctk.CTkButton(nav, text="← Retour", width=130, height=38,
+    ctk.CTkButton(nav, text=t("common.retour"), width=130, height=38,
                   font=("Segoe UI", 12), corner_radius=3,
                   fg_color="#141210", hover_color="#28231F", text_color="#8A8071",
                   command=lambda: slide_vers(ecran_contrat, ecran_whitelist_nouveau)
                   ).pack(side="left", padx=8)
 
-    ctk.CTkButton(nav, text="Suivant →", width=180, height=38,
+    ctk.CTkButton(nav, text=t("common.suivant_fleche"), width=180, height=38,
                   font=("JetBrains Mono", 12, "bold"), corner_radius=3,
                   fg_color="#A82230", hover_color="#A82230", text_color="#E8DFCE",
                   command=_wl_valider).pack(side="left", padx=8)
@@ -6070,7 +5983,7 @@ def _wl_construire_recap(wl: dict, ecran_precedent):
     for w in ecran_whitelist_nouveau.winfo_children():
         w.destroy()
 
-    ctk.CTkLabel(ecran_whitelist_nouveau, text="TES OUTILS HABITUELS",
+    ctk.CTkLabel(ecran_whitelist_nouveau, text=t("whitelist_new.recap_titre"),
                  font=("Segoe UI", 16, "bold"), text_color="#E8DFCE").pack(pady=(28, 8))
 
     recap_frame = ctk.CTkFrame(ecran_whitelist_nouveau,
@@ -6079,7 +5992,7 @@ def _wl_construire_recap(wl: dict, ecran_precedent):
                                 corner_radius=3)
     recap_frame.pack(padx=40, fill="x", pady=(0, 12))
 
-    ctk.CTkLabel(recap_frame, text="Applications",
+    ctk.CTkLabel(recap_frame, text=t("whitelist_new.recap_apps"),
                  font=("JetBrains Mono", 10, "bold"), text_color="#5C574C",
                  anchor="w").pack(fill="x", padx=16, pady=(14, 6))
 
@@ -6091,7 +6004,7 @@ def _wl_construire_recap(wl: dict, ecran_precedent):
                      row=i // 3, column=i % 3, sticky="w", padx=12, pady=2)
 
     if wl.get("blocked"):
-        ctk.CTkLabel(recap_frame, text="Sites bloqués",
+        ctk.CTkLabel(recap_frame, text=t("whitelist_new.recap_sites"),
                      font=("JetBrains Mono", 10, "bold"), text_color="#5C574C",
                      anchor="w").pack(fill="x", padx=16, pady=(4, 4))
         sites_flow = ctk.CTkFrame(recap_frame, fg_color="transparent")
@@ -6104,13 +6017,13 @@ def _wl_construire_recap(wl: dict, ecran_precedent):
     nav = ctk.CTkFrame(ecran_whitelist_nouveau, fg_color="transparent")
     nav.pack(pady=(8, 16))
 
-    ctk.CTkButton(nav, text="← Retour", width=120, height=38,
+    ctk.CTkButton(nav, text=t("common.retour"), width=120, height=38,
                   font=("Segoe UI", 12), corner_radius=3,
                   fg_color="#141210", hover_color="#28231F", text_color="#8A8071",
                   command=lambda: slide_vers(ecran_contrat, ecran_whitelist_nouveau)
                   ).pack(side="left", padx=6)
 
-    ctk.CTkButton(nav, text="Modifier", width=120, height=38,
+    ctk.CTkButton(nav, text=t("whitelist_new.btn_modifier"), width=120, height=38,
                   font=("Segoe UI", 12), corner_radius=3,
                   fg_color="#141210", hover_color="#28231F",
                   border_width=1, border_color="#1F1B18", text_color="#8A8071",
@@ -6125,7 +6038,7 @@ def _wl_construire_recap(wl: dict, ecran_precedent):
         session_cfg["blocked_sites"] = wl.get("blocked", [])
         _lancer_session_finale()
 
-    ctk.CTkButton(nav, text="LANCER LA SESSION →", width=200, height=38,
+    ctk.CTkButton(nav, text=t("whitelist_new.btn_lancer"), width=200, height=38,
                   font=("Segoe UI", 12, "bold"), corner_radius=3,
                   fg_color="#A82230", hover_color="#A82230", text_color="#E8DFCE",
                   command=_lancer_recap).pack(side="left", padx=6)
@@ -6240,10 +6153,10 @@ def _wl_sites_construire():
 
     # ── Titre ──
     ctk.CTkLabel(ecran_whitelist_sites,
-                 text="Sites bloqués",
+                 text=t("sites.titre"),
                  font=theme_sumi.serif(20), text_color="#E8DFCE").pack(pady=(18, 2))
     ctk.CTkLabel(ecran_whitelist_sites,
-                 text="Les sites cochés seront bloqués pendant la session",
+                 text=t("sites.sous_titre"),
                  font=("Segoe UI", 10), text_color="#8A8071").pack(pady=(0, 10))
 
     # ── Champ ajout domaine à bloquer ──
@@ -6253,7 +6166,7 @@ def _wl_sites_construire():
 
     add_var = ctk.StringVar()
     add_entry = ctk.CTkEntry(add_frame, textvariable=add_var,
-                              placeholder_text="Ajouter un domaine à bloquer  (ex: twitch.tv)",
+                              placeholder_text=t("sites.ajout_placeholder"),
                               height=40, corner_radius=3,
                               fg_color="#141210", border_color="#1F1B18",
                               text_color="#B8AF9E",
@@ -6270,7 +6183,7 @@ def _wl_sites_construire():
         add_var.set("")
         _rebuild_custom_rows()
 
-    ctk.CTkButton(add_frame, text="+ Bloquer", width=100, height=30,
+    ctk.CTkButton(add_frame, text=t("sites.btn_bloquer"), width=100, height=30,
                   font=("JetBrains Mono", 10, "bold"), corner_radius=3,
                   fg_color="#A82230", hover_color="#A82230", text_color="#EA5561",
                   command=_ajouter_site).pack(side="right", padx=(0, 10), pady=8)
@@ -6363,13 +6276,13 @@ def _wl_sites_construire():
     nav = ctk.CTkFrame(ecran_whitelist_sites, fg_color="transparent")
     nav.pack(pady=(6, 14))
 
-    ctk.CTkButton(nav, text="← Retour", width=130, height=38,
+    ctk.CTkButton(nav, text=t("common.retour"), width=130, height=38,
                   font=("Segoe UI", 12), corner_radius=3,
                   fg_color="#141210", hover_color="#28231F", text_color="#8A8071",
                   command=lambda: slide_vers(ecran_whitelist_nouveau, ecran_whitelist_sites)
                   ).pack(side="left", padx=8)
 
-    ctk.CTkButton(nav, text="DÉMARRER LE FOCUS", width=220, height=38,
+    ctk.CTkButton(nav, text=t("whitelist_legacy.btn_demarrer"), width=220, height=38,
                   font=("JetBrains Mono", 12, "bold"), corner_radius=3,
                   fg_color="#A82230", hover_color="#A82230", text_color="#E8DFCE",
                   command=_wl_sites_valider).pack(side="left", padx=8)
@@ -6386,23 +6299,23 @@ def _wl_sites_valider():
     if sites and not _est_admin():
         # Fenêtre d'avertissement admin
         dlg = ctk.CTkToplevel(root)
-        dlg.title("Droits insuffisants")
+        dlg.title(t("sites_admin.titre_fenetre"))
         dlg.resizable(False, False)
         dlg.grab_set()
         dlg.attributes("-topmost", True)
         _centrer_popup(dlg, 420, 200)
-        ctk.CTkLabel(dlg, text="⚠  Blocage des sites",
+        ctk.CTkLabel(dlg, text=t("sites_admin.titre"),
                      font=("JetBrains Mono", 14, "bold"), text_color="#D4A24C").pack(pady=(24, 4))
         ctk.CTkLabel(dlg,
-                     text="Le blocage des sites nécessite les droits\nadministrateur (modification du fichier hosts).",
+                     text=t("sites_admin.texte"),
                      font=("Segoe UI", 11), text_color="#B8AF9E", justify="center").pack(pady=(0, 16))
         btns = ctk.CTkFrame(dlg, fg_color="transparent")
         btns.pack()
-        ctk.CTkButton(btns, text="Relancer en admin", width=160, height=34,
+        ctk.CTkButton(btns, text=t("sites_admin.relancer"), width=160, height=34,
                       fg_color="#5A3000", hover_color="#7A4800", text_color="#E8C99A",
                       font=("Segoe UI", 11),
                       command=lambda: (_relancer_en_admin())).pack(side="left", padx=8)
-        ctk.CTkButton(btns, text="Continuer sans blocage", width=180, height=34,
+        ctk.CTkButton(btns, text=t("sites_admin.continuer_sans"), width=180, height=34,
                       fg_color="#1F1B18", hover_color="#28231F", text_color="#8A8071",
                       font=("Segoe UI", 11),
                       command=lambda: (dlg.destroy(),
@@ -6471,8 +6384,8 @@ def _lancer_session_finale():
     if sites_bloques and mode != "libre":
         bloquer_sites(sites_bloques)
 
-    t = session_cfg["type"]
-    if t == "pomodoro":
+    type_session = session_cfg["type"]
+    if type_session == "pomodoro":
         session_type = "pomodoro"
         global pomodoro_phase
         pomodoro_phase = "focus"
@@ -6480,10 +6393,10 @@ def _lancer_session_finale():
         duree_minutes = 25
         mode_infini = False
         demarrer_pomodoro()
-    elif t == "quarantaine":
+    elif type_session == "quarantaine":
         session_type = "quarantaine"
         demarrer_quarantaine()
-    elif t == "infini":
+    elif type_session == "infini":
         session_type = "infini"
         mode_infini = True
         demarrer_infini()
@@ -6581,13 +6494,13 @@ def _construire_violation_hardcore():
     ctk.CTkLabel(seal, text="禅", font=theme_sumi.serif(64),
                  text_color=theme_sumi.HANKO_DEEP).place(relx=0.5, rely=0.5, anchor="center")
 
-    ctk.CTkLabel(centre, text="HARDCORE — VERROU EN COURS",
+    ctk.CTkLabel(centre, text=t("violation.verrou_en_cours"),
                  font=theme_sumi.mono(11), text_color=theme_sumi.PAPER
                  ).pack(pady=(28, 0))
 
     ligne_titre = ctk.CTkFrame(centre, fg_color="transparent")
     ligne_titre.pack(pady=(6, 0))
-    ctk.CTkLabel(ligne_titre, text="Reviens dans ", font=theme_sumi.serif(52),
+    ctk.CTkLabel(ligne_titre, text=t("violation.reviens_dans"), font=theme_sumi.serif(52),
                  text_color=theme_sumi.PAPER).pack(side="left")
     win._lbl_minuteur = ctk.CTkLabel(
         ligne_titre, text="00:00:00",
@@ -6614,7 +6527,7 @@ def _construire_violation_hardcore():
     bloc.pack(pady=(36, 0))
     ligne_bloc = ctk.CTkFrame(bloc, fg_color="transparent")
     ligne_bloc.pack(padx=24, pady=16)
-    ctk.CTkLabel(ligne_bloc, text="DÉBLOCAGE D'URGENCE", font=theme_sumi.mono(10),
+    ctk.CTkLabel(ligne_bloc, text=t("violation.deblocage_urgence"), font=theme_sumi.mono(10),
                  text_color=theme_sumi.PAPER).pack(side="left")
     ctk.CTkFrame(ligne_bloc, width=1, height=20,
                  fg_color=theme_sumi.PAPER).pack(side="left", padx=16)
@@ -6623,12 +6536,12 @@ def _construire_violation_hardcore():
                  width=160, corner_radius=0, padx=12, pady=8).pack(side="left")
     # Cosmétique/informatif uniquement — pas de mécanisme de déblocage réel
     # (cf. plan de reproduction du design, point de scope #3).
-    ctk.CTkButton(ligne_bloc, text="Débloquer (–20 pts)", font=theme_sumi.ui(12, "bold"),
+    ctk.CTkButton(ligne_bloc, text=t("violation.debloquer_btn"), font=theme_sumi.ui(12, "bold"),
                   fg_color=theme_sumi.PAPER, hover_color=theme_sumi.PAPER,
                   text_color=theme_sumi.HANKO_DEEP, corner_radius=0, width=150,
                   command=lambda: None).pack(side="left", padx=(16, 0))
 
-    ctk.CTkLabel(centre, text="3 TENTATIVES INCORRECTES → PÉNALITÉ SUPPLÉMENTAIRE",
+    ctk.CTkLabel(centre, text=t("violation.tentatives_incorrectes"),
                  font=theme_sumi.mono(10), text_color=theme_sumi.PAPER
                  ).pack(pady=(12, 0))
 
@@ -6646,22 +6559,22 @@ def _afficher_violation_hardcore(app_nom, countdown):
         _hc_violation_win[0] = win
 
     num_session = session_cfg.get("num_session", 1)
-    win._lbl_session.configure(text=f"BEFREE · HARDCORE · VERROU · SESSION #{num_session}")
+    win._lbl_session.configure(text=t("violation.session_label", n=num_session))
     win._lbl_tentative.configure(
-        text=f"TENTATIVE : {app_nom.upper()}.EXE · {datetime.now().strftime('%H:%M')}")
+        text=t("violation.tentative", app=app_nom.upper(), heure=datetime.now().strftime("%H:%M")))
     win._lbl_minuteur.configure(text=_formater_hms(_hc_temps_restant_secs()))
 
     objectif = (session_cfg.get("objectif") or "").strip()
     if objectif:
         court = objectif[:100] + ("…" if len(objectif) > 100 else "")
-        prenom = _nom_utilisateur_local() or "Toi"
+        prenom = _nom_utilisateur_local() or t("session.toi_defaut")
         heure_debut = session_cfg.get("heure_debut", "")
-        win._lbl_citation.configure(text=f"« {court} » — {prenom}, {heure_debut}")
+        win._lbl_citation.configure(text=t("violation.citation", citation=court, prenom=prenom, heure=heure_debut))
     else:
         win._lbl_citation.configure(text="")
 
     win._lbl_grace.configure(
-        text=f"{app_nom} — ferme-le toi-même dans {countdown}s, sinon fermeture forcée.")
+        text=t("violation.grace", app=app_nom, n=countdown))
 
     win.deiconify()
     win.lift()
@@ -6675,10 +6588,188 @@ def _fermer_violation_hardcore():
         win.withdraw()
 
 
+def _afficher_ecran_langue():
+    """Choix de langue au tout premier lancement (pas de clé "lang" dans
+    config.json). Textes en dur (jamais via t()) — aucune langue n'est encore
+    choisie. Au clic Confirmer : écrit lang dans config.json puis relance l'app
+    pour que tout reparte dans la bonne langue dès le premier widget."""
+    pop = ctk.CTkToplevel(root)
+    pop.title("BeFree")
+    pop.resizable(False, False)
+    pop.transient(root)
+    pop.grab_set()
+    pop.configure(fg_color="#0A0908")
+    pop.protocol("WM_DELETE_WINDOW", lambda: None)
+    _centrer_popup(pop, 560, 490)
+
+    modal = ctk.CTkFrame(pop, fg_color="#141210", corner_radius=0,
+                          border_width=1, border_color="#2A2622")
+    modal.pack(fill="both", expand=True, padx=20, pady=20)
+
+    inner = ctk.CTkFrame(modal, fg_color="transparent")
+    inner.pack(fill="both", expand=True, padx=32, pady=(28, 24))
+
+    # Wordmark
+    _wm = ctk.CTkFrame(inner, fg_color="transparent")
+    _wm.pack()
+    ctk.CTkLabel(_wm, text="BeFree", font=theme_sumi.serif(26),
+                 text_color="#E8DFCE").pack(side="left")
+    ctk.CTkLabel(_wm, text=".", font=theme_sumi.serif(26),
+                 text_color="#E63946").pack(side="left")
+
+    ctk.CTkLabel(inner, text="Choisissez votre langue",
+                 font=theme_sumi.serif(20), text_color="#E8DFCE").pack(pady=(14, 0))
+    ctk.CTkLabel(inner, text="Choose your language",
+                 font=theme_sumi.mono(10), text_color="#8A8071").pack(pady=(2, 0))
+
+    # Drapeaux PIL
+    def _flag_fr():
+        img = Image.new("RGBA", (56, 38), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, 18, 37], fill="#002395")
+        d.rectangle([19, 0, 37, 37], fill="#FFFFFF")
+        d.rectangle([38, 0, 55, 37], fill="#ED2939")
+        return ctk.CTkImage(light_image=img, size=(56, 38))
+
+    def _flag_uk():
+        img = Image.new("RGBA", (56, 38), "#012169")
+        d = ImageDraw.Draw(img)
+        d.line([(0, 0), (56, 38)], fill="white", width=8)
+        d.line([(0, 38), (56, 0)], fill="white", width=8)
+        d.line([(0, 0), (56, 38)], fill="#C8102E", width=4)
+        d.line([(0, 38), (56, 0)], fill="#C8102E", width=4)
+        d.rectangle([24, 0, 32, 38], fill="white")
+        d.rectangle([0, 15, 56, 23], fill="white")
+        d.rectangle([26, 0, 30, 38], fill="#C8102E")
+        d.rectangle([0, 17, 56, 21], fill="#C8102E")
+        return ctk.CTkImage(light_image=img, size=(56, 38))
+
+    def _flag_es_small():
+        img = Image.new("RGBA", (24, 16), (0, 0, 0, 0))
+        d = ImageDraw.Draw(img)
+        d.rectangle([0, 0, 23, 3],  fill="#AA151B")
+        d.rectangle([0, 4, 23, 11], fill="#F1BF00")
+        d.rectangle([0, 12, 23, 15], fill="#AA151B")
+        return ctk.CTkImage(light_image=img, size=(24, 16))
+
+    _img_fr = _flag_fr()
+    _img_uk = _flag_uk()
+    _img_es = _flag_es_small()
+
+    def _choisir(code):
+        cfg = charger_config()
+        cfg["lang"] = code
+        sauvegarder_config(cfg)
+        subprocess.Popen(
+            _cmd_relancer(),
+            cwd=DATA_DIR,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        os._exit(0)
+
+    _sel_var  = [None]
+    _card_refs = {}
+
+    _LANG_DATA = [
+        ("fr", _img_fr, "Français", "FRANÇAIS"),
+        ("en", _img_uk, "English",  "ENGLISH"),
+    ]
+
+    def _selectionner(code):
+        _sel_var[0] = code
+        for _c, _refs in _card_refs.items():
+            _sel = (_c == code)
+            _refs["card"].configure(
+                border_width=2 if _sel else 1,
+                border_color="#E63946" if _sel else "#2A2622")
+            if _sel:
+                _refs["badge"].place(relx=1.0, x=-1, y=-1, anchor="ne")
+            else:
+                _refs["badge"].place_forget()
+            _refs["native"].configure(text_color="#E63946" if _sel else "#8A8071")
+        btn_confirmer.configure(state="normal", fg_color="#E8DFCE",
+                                 hover_color="#D8CFC0", text_color="#0A0908")
+
+    # Cartes de langue
+    cards_frame = ctk.CTkFrame(inner, fg_color="transparent")
+    cards_frame.pack(pady=(20, 0))
+
+    for _i, (_code, _flag_img, _nom, _natif) in enumerate(_LANG_DATA):
+        _card = ctk.CTkFrame(cards_frame, width=210, height=165,
+                              fg_color="#141210", corner_radius=0,
+                              border_width=1, border_color="#2A2622")
+        _card.grid(row=0, column=_i, padx=(0 if _i == 0 else 12, 0))
+        _card.grid_propagate(False)
+
+        _badge = ctk.CTkLabel(_card, text="✓  SÉLECTIONNÉ",
+                               font=theme_sumi.mono(8),
+                               fg_color="#E63946", text_color="#0A0908",
+                               corner_radius=0)
+
+        _pad = ctk.CTkFrame(_card, fg_color="transparent")
+        _pad.place(relx=0.5, rely=0.5, anchor="center")
+
+        _fl = ctk.CTkLabel(_pad, image=_flag_img, text="")
+        _fl.image = _flag_img
+        _fl.pack(pady=(0, 10))
+
+        ctk.CTkLabel(_pad, text=_nom, font=theme_sumi.serif(20),
+                     text_color="#E8DFCE").pack()
+        _native_lbl = ctk.CTkLabel(_pad, text=_natif, font=theme_sumi.mono(9),
+                                    text_color="#8A8071")
+        _native_lbl.pack(pady=(2, 0))
+
+        _card_refs[_code] = {"card": _card, "badge": _badge, "native": _native_lbl}
+
+        def _make_click(c):
+            def _click(e=None): _selectionner(c)
+            return _click
+
+        _fn = _make_click(_code)
+        _card.bind("<Button-1>", _fn)
+        _card.configure(cursor="hand2")
+        for _w in _pad.winfo_children():
+            _w.bind("<Button-1>", _fn)
+            try:
+                _w.configure(cursor="hand2")
+            except Exception:
+                pass
+
+    # Ligne Español (coming soon)
+    _es_row = ctk.CTkFrame(inner, fg_color="transparent")
+    _es_row.pack(fill="x", pady=(14, 0))
+    _es_flag_lbl = ctk.CTkLabel(_es_row, image=_img_es, text="")
+    _es_flag_lbl.image = _img_es
+    _es_flag_lbl.pack(side="left", padx=(0, 8))
+    ctk.CTkLabel(_es_row, text="Español", font=theme_sumi.serif(15),
+                 text_color="#5C574C").pack(side="left")
+    ctk.CTkLabel(_es_row, text="PROCHAINEMENT", font=theme_sumi.mono(9),
+                 text_color="#5C574C").pack(side="right")
+
+    # Bouton Confirmer
+    btn_confirmer = ctk.CTkButton(
+        inner, text="Confirmer  ▶",
+        font=theme_sumi.ui(14, "bold"),
+        state="disabled",
+        fg_color="#1F1B18", hover_color="#1F1B18",
+        text_color="#5C574C",
+        corner_radius=0, height=46,
+        command=lambda: _choisir(_sel_var[0]) if _sel_var[0] else None
+    )
+    btn_confirmer.pack(fill="x", pady=(20, 0))
+
+    pop.lift()
+    pop.attributes("-topmost", True)
+
+
 # =====================================================================
 #                           LANCEMENT
 # =====================================================================
 root.protocol("WM_DELETE_WINDOW", on_fermeture)
+
+if _PREMIER_LANCEMENT_LANGUE:
+    _afficher_ecran_langue()
 
 # Charger les apps détectées avant la restauration
 load_detected_apps()
