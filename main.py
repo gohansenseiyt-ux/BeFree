@@ -10,6 +10,7 @@ import csv
 import threading
 import hashlib
 import math
+import secrets
 import socket
 import smtplib
 import subprocess
@@ -951,6 +952,7 @@ def naviguer_sidebar(page):
     elif page == "stats":
         montrer_ecran(ecran_stats)
     elif page == "parametres":
+        _rafraichir_code_fondateur_param()
         # Physical Lock vérifié en premier
         if physical_lock_actif() and not verifier_cle_usb():
             _afficher_erreur_cle_usb()
@@ -3019,6 +3021,26 @@ def sauvegarder_config(data):
         pass
 
 
+_FOUNDER_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # exclut 0/O, 1/I/L (ambigus à recopier)
+
+
+def _generer_code_fondateur():
+    return "BEFREE-" + "".join(secrets.choice(_FOUNDER_ALPHABET) for _ in range(6))
+
+
+def _obtenir_ou_creer_code_fondateur():
+    """Retourne (code, nouveau) — génère et persiste le code au premier appel
+    (nouvelle install ou mise à jour depuis une version qui ne l'avait pas)."""
+    cfg = charger_config()
+    code = cfg.get("founder_code")
+    nouveau = code is None
+    if nouveau:
+        code = _generer_code_fondateur()
+        cfg["founder_code"] = code
+        sauvegarder_config(cfg)
+    return code, nouveau
+
+
 def hash_mdp(mdp):
     return hashlib.sha256(mdp.encode("utf-8")).hexdigest()
 
@@ -4342,10 +4364,38 @@ ecran_accueil = ctk.CTkFrame(content_frame, fg_color="transparent")
 conteneur_accueil = ctk.CTkFrame(ecran_accueil, fg_color="transparent")
 conteneur_accueil.pack(fill="both", expand=True, padx=44, pady=(32, 20))
 
-lbl_accueil_date = ctk.CTkLabel(conteneur_accueil, text="",
+_accueil_top_row = ctk.CTkFrame(conteneur_accueil, fg_color="transparent")
+_accueil_top_row.pack(fill="x")
+
+lbl_accueil_date = ctk.CTkLabel(_accueil_top_row, text="",
                                  font=theme_sumi.mono(10), text_color="#8A8071",
                                  anchor="w")
-lbl_accueil_date.pack(fill="x")
+lbl_accueil_date.pack(side="left")
+
+_accueil_fondateur_chip = ctk.CTkFrame(_accueil_top_row, fg_color="transparent",
+                                        cursor="hand2")
+_accueil_fondateur_chip.pack(side="right")
+ctk.CTkLabel(_accueil_fondateur_chip, text=t("accueil.fondateur_label"),
+             font=theme_sumi.mono(9), text_color="#8A8071").pack(side="left", padx=(0, 6))
+lbl_accueil_fondateur_code = ctk.CTkLabel(_accueil_fondateur_chip, text="",
+                                           font=theme_sumi.mono(10, "bold"),
+                                           text_color="#E63946")
+lbl_accueil_fondateur_code.pack(side="left")
+
+
+def _copier_code_fondateur_accueil(event=None):
+    code = charger_config().get("founder_code", "")
+    if not code:
+        return
+    root.clipboard_clear()
+    root.clipboard_append(code)
+    lbl_accueil_fondateur_code.configure(text=t("fondateur.copie"))
+    root.after(1200, lambda: lbl_accueil_fondateur_code.configure(text=code))
+
+
+_accueil_fondateur_chip.bind("<Button-1>", _copier_code_fondateur_accueil)
+for _w in _accueil_fondateur_chip.winfo_children():
+    _w.bind("<Button-1>", _copier_code_fondateur_accueil)
 
 lbl_accueil_bonjour = ctk.CTkLabel(conteneur_accueil, text=t("accueil.bonjour"),
                                     font=theme_sumi.serif(40, weight="semibold"),
@@ -4456,6 +4506,7 @@ def rafraichir_accueil():
     now = datetime.now()
     lbl_accueil_date.configure(
         text=f"{i18n.weekday_names()[now.weekday()].upper()} · {now.day} {i18n.month_names()[now.month - 1].upper()} · {now.strftime('%H:%M')}")
+    lbl_accueil_fondateur_code.configure(text=charger_config().get("founder_code", "—"))
 
     prenom = _nom_utilisateur_local()
     lbl_accueil_bonjour.configure(text=t("accueil.bonjour_prenom", prenom=prenom) if prenom else t("accueil.bonjour"))
@@ -4694,6 +4745,42 @@ for _code, _label in i18n.LANGUAGES:
         border_width=0,
         command=lambda c=_code: _changer_langue(c)
     ).pack(side="left", padx=(0, 6))
+
+
+# ═══════════════════════ CODE FONDATEUR ═══════════════════════
+_param_section(t("parametres.section_fondateur"))
+
+_ctrl_fondateur = _param_row(t("parametres.fondateur_titre"), t("parametres.fondateur_desc"))
+lbl_code_fondateur_param = ctk.CTkLabel(_ctrl_fondateur, text="—",
+                                         font=theme_sumi.mono(13, "bold"),
+                                         text_color="#E63946")
+lbl_code_fondateur_param.pack(side="left", padx=(0, 10))
+
+
+def _copier_code_fondateur_param():
+    code = charger_config().get("founder_code", "")
+    if not code:
+        return
+    root.clipboard_clear()
+    root.clipboard_append(code)
+    btn_copier_fondateur.configure(text=t("fondateur.copie"))
+    root.after(1500, lambda: btn_copier_fondateur.configure(text=t("fondateur.copier")))
+
+
+btn_copier_fondateur = ctk.CTkButton(
+    _ctrl_fondateur, text=t("fondateur.copier"),
+    font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
+    fg_color="transparent", hover_color="#1F1B18",
+    border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
+    command=_copier_code_fondateur_param)
+btn_copier_fondateur.pack(side="left")
+
+
+def _rafraichir_code_fondateur_param():
+    lbl_code_fondateur_param.configure(text=charger_config().get("founder_code", "—"))
+
+
+_rafraichir_code_fondateur_param()
 
 
 # ═══════════════════════ COMPTE ═══════════════════════
@@ -6770,6 +6857,8 @@ root.protocol("WM_DELETE_WINDOW", on_fermeture)
 
 if _PREMIER_LANCEMENT_LANGUE:
     _afficher_ecran_langue()
+else:
+    _obtenir_ou_creer_code_fondateur()  # génère le code au besoin (affiché sur Accueil/Paramètres)
 
 # Charger les apps détectées avant la restauration
 load_detected_apps()

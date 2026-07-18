@@ -118,6 +118,16 @@ STRINGS["fr"].update({
     "parametres.langue_desc": "Change la langue de tous les écrans de BeFree.",
     "parametres.langue_redemarrer": "Langue enregistrée. Redémarre BeFree pour l'appliquer partout.",
 
+    # ── Code Fondateur (chip Accueil + section Paramètres) ──
+    "accueil.fondateur_label": "FONDATEUR",
+    "fondateur.copier": "Copier",
+    "fondateur.copie": "Copié !",
+
+    # ── Paramètres — section Code Fondateur ──
+    "parametres.section_fondateur": "CODE FONDATEUR",
+    "parametres.fondateur_titre": "Ton code",
+    "parametres.fondateur_desc": "Le code unique reçu à ta première installation de BeFree.",
+
     # ── Assistant Mode → Type ──
     "common.retour": "← Retour",
     "common.suivant": "Suivant   ▶",
@@ -528,6 +538,14 @@ STRINGS["en"].update({
     "parametres.langue_titre": "App language",
     "parametres.langue_desc": "Changes the language of every BeFree screen.",
     "parametres.langue_redemarrer": "Language saved. Restart BeFree to apply it everywhere.",
+
+    "accueil.fondateur_label": "FOUNDER",
+    "fondateur.copier": "Copy",
+    "fondateur.copie": "Copied!",
+
+    "parametres.section_fondateur": "FOUNDER CODE",
+    "parametres.fondateur_titre": "Your code",
+    "parametres.fondateur_desc": "The unique code you received on your first BeFree install.",
 
     "common.retour": "← Back",
     "common.suivant": "Next   ▶",

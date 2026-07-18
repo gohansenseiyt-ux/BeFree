@@ -33,6 +33,7 @@ __pycache__/
 dist/
 build/
 *.spec
+!BeFree.spec
 *.egg-info/
 
 # IDE
