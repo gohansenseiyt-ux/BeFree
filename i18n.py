@@ -124,9 +124,10 @@ STRINGS["fr"].update({
     "fondateur.copie": "Copié !",
 
     # ── Paramètres — section Code Fondateur ──
-    "parametres.section_fondateur": "CODE FONDATEUR",
-    "parametres.fondateur_titre": "Ton code",
-    "parametres.fondateur_desc": "Le code unique reçu à ta première installation de BeFree.",
+    "parametres.section_fondateur": "COMPTE FONDATEUR",
+    "parametres.fondateur_titre": "Ton statut Fondateur",
+    "parametres.fondateur_desc": "Un code unique donnant accès aux avantages des 500 premiers membres.",
+    "parametres.fondateur_connexion": "Se connecter",
 
     # ── Assistant Mode → Type ──
     "common.retour": "← Retour",
@@ -543,9 +544,10 @@ STRINGS["en"].update({
     "fondateur.copier": "Copy",
     "fondateur.copie": "Copied!",
 
-    "parametres.section_fondateur": "FOUNDER CODE",
-    "parametres.fondateur_titre": "Your code",
-    "parametres.fondateur_desc": "The unique code you received on your first BeFree install.",
+    "parametres.section_fondateur": "FOUNDER ACCOUNT",
+    "parametres.fondateur_titre": "Your Founder status",
+    "parametres.fondateur_desc": "A unique code granting the first 500 members' perks.",
+    "parametres.fondateur_connexion": "Log in",
 
     "common.retour": "← Back",
     "common.suivant": "Next   ▶",

@@ -204,6 +204,7 @@ if "--watchdog-role" in sys.argv:
 
 # À partir d'ici : lancement réel de l'application (fenêtre, GUI) — le rôle
 # watchdog ci-dessus est toujours sorti (sys.exit) avant d'atteindre ce point.
+import founder_backend
 import customtkinter as ctk
 import pystray
 from PIL import Image, ImageDraw
@@ -3028,19 +3029,6 @@ def _generer_code_fondateur():
     return "BEFREE-" + "".join(secrets.choice(_FOUNDER_ALPHABET) for _ in range(6))
 
 
-def _obtenir_ou_creer_code_fondateur():
-    """Retourne (code, nouveau) — génère et persiste le code au premier appel
-    (nouvelle install ou mise à jour depuis une version qui ne l'avait pas)."""
-    cfg = charger_config()
-    code = cfg.get("founder_code")
-    nouveau = code is None
-    if nouveau:
-        code = _generer_code_fondateur()
-        cfg["founder_code"] = code
-        sauvegarder_config(cfg)
-    return code, nouveau
-
-
 def hash_mdp(mdp):
     return hashlib.sha256(mdp.encode("utf-8")).hexdigest()
 
@@ -4685,7 +4673,9 @@ def exporter_statistiques():
 
 ecran_parametres = ctk.CTkFrame(content_frame, fg_color="transparent")
 
-conteneur_param = ctk.CTkFrame(ecran_parametres, fg_color="transparent")
+conteneur_param = ctk.CTkScrollableFrame(ecran_parametres, fg_color="transparent",
+                                          scrollbar_button_color="#2A2622",
+                                          scrollbar_button_hover_color="#3A352E")
 conteneur_param.pack(fill="both", expand=True, padx=44, pady=(32, 20))
 
 titre_param = ctk.CTkLabel(conteneur_param, text=t("parametres.titre"),
@@ -4720,6 +4710,49 @@ def _param_row(titre, description=None):
     return droite
 
 
+# ═══════════════════════ COMPTE FONDATEUR ═══════════════════════
+_param_section(t("parametres.section_fondateur"))
+
+_ctrl_fondateur = _param_row(t("parametres.fondateur_titre"), t("parametres.fondateur_desc"))
+
+
+def _rafraichir_code_fondateur_param():
+    for _w in _ctrl_fondateur.winfo_children():
+        _w.destroy()
+
+    code = charger_config().get("founder_code")
+    if not code:
+        ctk.CTkButton(
+            _ctrl_fondateur, text=t("parametres.fondateur_connexion"),
+            font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
+            fg_color="#E8DFCE", hover_color="#D8CFC0", text_color="#0A0908",
+            border_width=0,
+            command=lambda: _afficher_ecran_compte_fondateur(then_langue=False, depuis_parametres=True)
+        ).pack(side="left")
+        return
+
+    lbl_code_fondateur_param = ctk.CTkLabel(
+        _ctrl_fondateur, text=code, font=theme_sumi.mono(13, "bold"), text_color="#E63946")
+    lbl_code_fondateur_param.pack(side="left", padx=(0, 10))
+
+    def _copier_code_fondateur_param():
+        root.clipboard_clear()
+        root.clipboard_append(code)
+        btn_copier_fondateur.configure(text=t("fondateur.copie"))
+        root.after(1500, lambda: btn_copier_fondateur.configure(text=t("fondateur.copier")))
+
+    btn_copier_fondateur = ctk.CTkButton(
+        _ctrl_fondateur, text=t("fondateur.copier"),
+        font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
+        fg_color="transparent", hover_color="#1F1B18",
+        border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
+        command=_copier_code_fondateur_param)
+    btn_copier_fondateur.pack(side="left")
+
+
+_rafraichir_code_fondateur_param()
+
+
 # ═══════════════════════ LANGUE ═══════════════════════
 _param_section(t("parametres.section_langue"))
 
@@ -4745,42 +4778,6 @@ for _code, _label in i18n.LANGUAGES:
         border_width=0,
         command=lambda c=_code: _changer_langue(c)
     ).pack(side="left", padx=(0, 6))
-
-
-# ═══════════════════════ CODE FONDATEUR ═══════════════════════
-_param_section(t("parametres.section_fondateur"))
-
-_ctrl_fondateur = _param_row(t("parametres.fondateur_titre"), t("parametres.fondateur_desc"))
-lbl_code_fondateur_param = ctk.CTkLabel(_ctrl_fondateur, text="—",
-                                         font=theme_sumi.mono(13, "bold"),
-                                         text_color="#E63946")
-lbl_code_fondateur_param.pack(side="left", padx=(0, 10))
-
-
-def _copier_code_fondateur_param():
-    code = charger_config().get("founder_code", "")
-    if not code:
-        return
-    root.clipboard_clear()
-    root.clipboard_append(code)
-    btn_copier_fondateur.configure(text=t("fondateur.copie"))
-    root.after(1500, lambda: btn_copier_fondateur.configure(text=t("fondateur.copier")))
-
-
-btn_copier_fondateur = ctk.CTkButton(
-    _ctrl_fondateur, text=t("fondateur.copier"),
-    font=("Segoe UI", 12, "bold"), height=34, corner_radius=3,
-    fg_color="transparent", hover_color="#1F1B18",
-    border_width=1, border_color="#E8DFCE", text_color="#E8DFCE",
-    command=_copier_code_fondateur_param)
-btn_copier_fondateur.pack(side="left")
-
-
-def _rafraichir_code_fondateur_param():
-    lbl_code_fondateur_param.configure(text=charger_config().get("founder_code", "—"))
-
-
-_rafraichir_code_fondateur_param()
 
 
 # ═══════════════════════ COMPTE ═══════════════════════
@@ -6850,15 +6847,248 @@ def _afficher_ecran_langue():
     pop.attributes("-topmost", True)
 
 
+_ERREURS_AUTH_FR = {
+    "user_already_exists": "Un compte existe déjà avec cet email — connecte-toi plutôt.",
+    "invalid_credentials": "Email ou mot de passe incorrect.",
+    "email_not_confirmed": "Confirme ton email avant de te connecter (vérifie ta boîte mail).",
+    "weak_password": "Mot de passe trop faible (6 caractères minimum).",
+}
+
+
+def _msg_auth_fr(erreur):
+    return _ERREURS_AUTH_FR.get(erreur.code, erreur.message)
+
+
+def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
+    """Écran Compte Fondateur (email + mot de passe via Supabase Auth),
+    réservation atomique d'une des 500 places. Toujours contournable
+    ("Continuer sans compte") — ne bloque jamais l'usage gratuit de BeFree.
+    Affiché soit au tout premier lancement (avant la langue), soit rappelé
+    depuis Paramètres pour un utilisateur en mode invité (depuis_parametres)."""
+    pop = ctk.CTkToplevel(root)
+    pop.title("BeFree")
+    pop.resizable(False, False)
+    pop.transient(root)
+    pop.grab_set()
+    pop.configure(fg_color="#0A0908")
+    pop.protocol("WM_DELETE_WINDOW", lambda: None)
+    _centrer_popup(pop, 560, 700)
+
+    modal = ctk.CTkFrame(pop, fg_color="#141210", corner_radius=0,
+                          border_width=1, border_color="#2A2622")
+    modal.pack(fill="both", expand=True, padx=20, pady=20)
+
+    inner = ctk.CTkFrame(modal, fg_color="transparent")
+    inner.pack(fill="both", expand=True, padx=32, pady=(26, 22))
+
+    _wm = ctk.CTkFrame(inner, fg_color="transparent")
+    _wm.pack()
+    ctk.CTkLabel(_wm, text="BeFree", font=theme_sumi.serif(26),
+                 text_color="#E8DFCE").pack(side="left")
+    ctk.CTkLabel(_wm, text=".", font=theme_sumi.serif(26),
+                 text_color="#E63946").pack(side="left")
+
+    ctk.CTkLabel(inner, text="DISCIPLINE — TU EN AS DÉJÀ. NOUS L'ORGANISONS.",
+                 font=theme_sumi.mono(9), text_color="#8A8071"
+                 ).pack(pady=(6, 0))
+
+    lbl_places = ctk.CTkLabel(inner, text="", font=theme_sumi.mono(9, "bold"),
+                               text_color="#E63946")
+    lbl_places.pack(pady=(10, 0))
+
+    def _rafraichir_places():
+        restantes = founder_backend.slots_remaining()
+        lbl_places.configure(
+            text=f"{restantes} / 500 PLACES FONDATEUR RESTANTES" if restantes is not None else "")
+
+    _rafraichir_places()
+
+    onglets = ctk.CTkFrame(inner, fg_color="transparent")
+    onglets.pack(fill="x", pady=(20, 0))
+
+    _mode = ["connexion"]
+
+    btn_onglet_connexion = ctk.CTkButton(
+        onglets, text="CONNEXION", font=theme_sumi.mono(11, "bold"),
+        corner_radius=0, height=38, border_width=0)
+    btn_onglet_connexion.pack(side="left", fill="x", expand=True)
+
+    btn_onglet_creer = ctk.CTkButton(
+        onglets, text="CRÉER UN COMPTE", font=theme_sumi.mono(11, "bold"),
+        corner_radius=0, height=38, border_width=0)
+    btn_onglet_creer.pack(side="left", fill="x", expand=True)
+
+    ctk.CTkLabel(inner, text="EMAIL", font=theme_sumi.mono(9),
+                 text_color="#8A8071", anchor="w").pack(fill="x", pady=(20, 4))
+    entry_email = ctk.CTkEntry(inner, font=theme_sumi.ui(13), height=40,
+                                corner_radius=0, fg_color="#0A0908",
+                                border_width=1, border_color="#2A2622",
+                                text_color="#E8DFCE",
+                                placeholder_text="jules@atelier.co")
+    entry_email.pack(fill="x")
+
+    ligne_mdp = ctk.CTkFrame(inner, fg_color="transparent")
+    ligne_mdp.pack(fill="x", pady=(16, 4))
+    ctk.CTkLabel(ligne_mdp, text="MOT DE PASSE", font=theme_sumi.mono(9),
+                 text_color="#8A8071", anchor="w").pack(side="left")
+    lbl_oublie = ctk.CTkLabel(ligne_mdp, text="Oublié ?", font=theme_sumi.ui(11),
+                               text_color="#E63946", cursor="hand2")
+    lbl_oublie.pack(side="right")
+
+    entry_mdp = ctk.CTkEntry(inner, font=theme_sumi.ui(13), height=40,
+                              corner_radius=0, fg_color="#0A0908",
+                              border_width=1, border_color="#2A2622",
+                              text_color="#E8DFCE", show="•")
+    entry_mdp.pack(fill="x")
+
+    lbl_erreur = ctk.CTkLabel(inner, text="", font=theme_sumi.ui(11),
+                               text_color="#E63946", wraplength=420, justify="left")
+    lbl_erreur.pack(fill="x", pady=(10, 0))
+
+    def _set_erreur(msg):
+        lbl_erreur.configure(text=msg)
+
+    def _appliquer_mode():
+        connexion = _mode[0] == "connexion"
+        btn_onglet_connexion.configure(
+            fg_color="#E8DFCE" if connexion else "transparent",
+            text_color="#0A0908" if connexion else "#8A8071",
+            hover_color="#D8CFC0" if connexion else "#1F1B18")
+        btn_onglet_creer.configure(
+            fg_color="#E8DFCE" if not connexion else "transparent",
+            text_color="#0A0908" if not connexion else "#8A8071",
+            hover_color="#D8CFC0" if not connexion else "#1F1B18")
+        lbl_oublie.configure(text="Oublié ?" if connexion else "")
+        btn_principal.configure(text="Se connecter" if connexion else "Créer mon compte")
+        _set_erreur("")
+
+    def _choisir_mode(mode):
+        _mode[0] = mode
+        _appliquer_mode()
+
+    btn_onglet_connexion.configure(command=lambda: _choisir_mode("connexion"))
+    btn_onglet_creer.configure(command=lambda: _choisir_mode("creer"))
+
+    def _continuer():
+        pop.destroy()
+        if depuis_parametres:
+            _rafraichir_code_fondateur_param()
+        elif then_langue:
+            _afficher_ecran_langue()
+
+    def _valider():
+        email = entry_email.get().strip()
+        mdp = entry_mdp.get()
+        if not email or "@" not in email:
+            _set_erreur("Entre un email valide.")
+            return
+        if len(mdp) < 6:
+            _set_erreur("Le mot de passe doit faire au moins 6 caractères.")
+            return
+
+        btn_principal.configure(state="disabled", text="…")
+        pop.update_idletasks()
+        try:
+            if _mode[0] == "connexion":
+                session = founder_backend.login(email, mdp)
+            else:
+                session = founder_backend.signup(email, mdp)
+            access_token = session.get("access_token")
+            if not access_token:
+                _set_erreur("Vérifie ta boîte mail pour confirmer ton compte, "
+                             "puis reviens te connecter.")
+                btn_principal.configure(state="normal")
+                _appliquer_mode()
+                return
+
+            cfg = charger_config()
+            code_local = cfg.get("founder_code") or _generer_code_fondateur()
+            try:
+                row = founder_backend.reserve_founder_slot(access_token, code_local)
+                cfg["founder_code"] = row.get("founder_code", code_local)
+                cfg["founder_slot_number"] = row.get("slot_number")
+            except founder_backend.FounderAuthError as e:
+                if e.code != "FOUNDER_SLOTS_FULL":
+                    raise
+                cfg.pop("founder_code", None)
+                cfg.pop("founder_slot_number", None)
+            cfg["founder_email"] = email
+            cfg["founder_account_done"] = True
+            sauvegarder_config(cfg)
+            _continuer()
+        except founder_backend.FounderAuthError as e:
+            _set_erreur(_msg_auth_fr(e))
+            btn_principal.configure(state="normal")
+            _appliquer_mode()
+
+    btn_principal = ctk.CTkButton(
+        inner, text="Se connecter", font=theme_sumi.ui(13, "bold"),
+        fg_color="#E8DFCE", hover_color="#D8CFC0", text_color="#0A0908",
+        corner_radius=0, height=44, command=_valider)
+    btn_principal.pack(fill="x", pady=(16, 0))
+
+    def _mot_de_passe_oublie(event=None):
+        email = entry_email.get().strip()
+        if not email or "@" not in email:
+            _set_erreur("Entre ton email d'abord, puis clique sur \"Oublié ?\".")
+            return
+        try:
+            founder_backend.recover_password(email)
+            _set_erreur("Email de réinitialisation envoyé.")
+        except founder_backend.FounderAuthError as e:
+            _set_erreur(_msg_auth_fr(e))
+
+    lbl_oublie.bind("<Button-1>", _mot_de_passe_oublie)
+
+    sep = ctk.CTkFrame(inner, fg_color="transparent")
+    sep.pack(fill="x", pady=(20, 0))
+    ctk.CTkFrame(sep, height=1, fg_color="#2A2622").pack(side="left", fill="x", expand=True)
+    ctk.CTkLabel(sep, text="OU", font=theme_sumi.mono(9), text_color="#8A8071"
+                 ).pack(side="left", padx=10)
+    ctk.CTkFrame(sep, height=1, fg_color="#2A2622").pack(side="left", fill="x", expand=True)
+
+    ctk.CTkButton(
+        inner, text="Continuer avec Google  ·  bientôt disponible",
+        font=theme_sumi.ui(12), fg_color="transparent", hover_color="#141210",
+        border_width=1, border_color="#2A2622", text_color="#5C574C",
+        corner_radius=0, height=44, state="disabled"
+    ).pack(fill="x", pady=(14, 0))
+
+    lbl_skip = ctk.CTkLabel(
+        inner, text="Annuler" if depuis_parametres else "Continuer sans compte",
+        font=theme_sumi.ui(11), text_color="#8A8071", cursor="hand2")
+    lbl_skip.pack(pady=(18, 0))
+
+    def _passer(event=None):
+        if depuis_parametres:
+            pop.destroy()
+            return
+        cfg = charger_config()
+        cfg["founder_account_done"] = True
+        sauvegarder_config(cfg)
+        _continuer()
+
+    lbl_skip.bind("<Button-1>", _passer)
+
+    ctk.CTkLabel(inner, text="En continuant, tu acceptes que ton email soit "
+                 "utilisé uniquement pour gérer ton statut Fondateur.",
+                 font=theme_sumi.ui(10), text_color="#5C574C",
+                 wraplength=420, justify="center").pack(pady=(20, 0))
+
+    _appliquer_mode()
+    pop.lift()
+    pop.attributes("-topmost", True)
+
+
 # =====================================================================
 #                           LANCEMENT
 # =====================================================================
 root.protocol("WM_DELETE_WINDOW", on_fermeture)
 
-if _PREMIER_LANCEMENT_LANGUE:
+if not charger_config().get("founder_account_done", False):
+    _afficher_ecran_compte_fondateur(then_langue=_PREMIER_LANCEMENT_LANGUE)
+elif _PREMIER_LANCEMENT_LANGUE:
     _afficher_ecran_langue()
-else:
-    _obtenir_ou_creer_code_fondateur()  # génère le code au besoin (affiché sur Accueil/Paramètres)
 
 # Charger les apps détectées avant la restauration
 load_detected_apps()
