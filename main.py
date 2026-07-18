@@ -6899,7 +6899,7 @@ def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
     def _rafraichir_places():
         restantes = founder_backend.slots_remaining()
         lbl_places.configure(
-            text=f"{restantes} / 500 PLACES FONDATEUR RESTANTES" if restantes is not None else "")
+            text=f"{restantes} / 500 PLACES PREMIUM RESTANTES" if restantes is not None else "")
 
     _rafraichir_places()
 
@@ -7071,7 +7071,7 @@ def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
     lbl_skip.bind("<Button-1>", _passer)
 
     ctk.CTkLabel(inner, text="En continuant, tu acceptes que ton email soit "
-                 "utilisé uniquement pour gérer ton statut Fondateur.",
+                 "utilisé uniquement pour gérer ton statut Premium.",
                  font=theme_sumi.ui(10), text_color="#5C574C",
                  wraplength=420, justify="center").pack(pady=(20, 0))
 
