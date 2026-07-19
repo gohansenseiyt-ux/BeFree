@@ -6966,6 +6966,13 @@ def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
         _mode[0] = mode
         _appliquer_mode()
 
+    def _restaurer_bouton():
+        """Réactive le bouton principal sans effacer le message d'erreur
+        (contrairement à _appliquer_mode, utilisé au changement d'onglet)."""
+        btn_principal.configure(
+            state="normal",
+            text="Se connecter" if _mode[0] == "connexion" else "Créer mon compte")
+
     btn_onglet_connexion.configure(command=lambda: _choisir_mode("connexion"))
     btn_onglet_creer.configure(command=lambda: _choisir_mode("creer"))
 
@@ -6995,10 +7002,9 @@ def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
                 session = founder_backend.signup(email, mdp)
             access_token = session.get("access_token")
             if not access_token:
+                _restaurer_bouton()
                 _set_erreur("Vérifie ta boîte mail pour confirmer ton compte, "
                              "puis reviens te connecter.")
-                btn_principal.configure(state="normal")
-                _appliquer_mode()
                 return
 
             cfg = charger_config()
@@ -7017,9 +7023,8 @@ def _afficher_ecran_compte_fondateur(then_langue, depuis_parametres=False):
             sauvegarder_config(cfg)
             _continuer()
         except founder_backend.FounderAuthError as e:
+            _restaurer_bouton()
             _set_erreur(_msg_auth_fr(e))
-            btn_principal.configure(state="normal")
-            _appliquer_mode()
 
     btn_principal = ctk.CTkButton(
         inner, text="Se connecter", font=theme_sumi.ui(13, "bold"),
