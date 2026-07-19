@@ -118,17 +118,6 @@ STRINGS["fr"].update({
     "parametres.langue_desc": "Change la langue de tous les écrans de BeFree.",
     "parametres.langue_redemarrer": "Langue enregistrée. Redémarre BeFree pour l'appliquer partout.",
 
-    # ── Code Premium (chip Accueil + section Paramètres) ──
-    "accueil.fondateur_label": "PREMIUM",
-    "fondateur.copier": "Copier",
-    "fondateur.copie": "Copié !",
-
-    # ── Paramètres — section Compte Premium ──
-    "parametres.section_fondateur": "COMPTE PREMIUM",
-    "parametres.fondateur_titre": "Ton statut Premium",
-    "parametres.fondateur_desc": "Un code unique donnant accès aux avantages des 500 premiers membres.",
-    "parametres.fondateur_connexion": "Se connecter",
-
     # ── Assistant Mode → Type ──
     "common.retour": "← Retour",
     "common.suivant": "Suivant   ▶",
@@ -539,15 +528,6 @@ STRINGS["en"].update({
     "parametres.langue_titre": "App language",
     "parametres.langue_desc": "Changes the language of every BeFree screen.",
     "parametres.langue_redemarrer": "Language saved. Restart BeFree to apply it everywhere.",
-
-    "accueil.fondateur_label": "PREMIUM",
-    "fondateur.copier": "Copy",
-    "fondateur.copie": "Copied!",
-
-    "parametres.section_fondateur": "PREMIUM ACCOUNT",
-    "parametres.fondateur_titre": "Your Premium status",
-    "parametres.fondateur_desc": "A unique code granting the first 500 members' perks.",
-    "parametres.fondateur_connexion": "Log in",
 
     "common.retour": "← Back",
     "common.suivant": "Next   ▶",
