@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeFree — Télécharger</title>
+<style>
+  :root {
+    --ink: #0b0b0c;
+    --paper: #f5f2ec;
+    --red: #b3231c;
+    --muted: #8a8578;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: Georgia, 'Cormorant Garamond', 'Times New Roman', serif;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 6rem 1.5rem 4rem;
+    text-align: center;
+  }
+  .seal {
+    width: 14px;
+    height: 14px;
+    background: var(--red);
+    border-radius: 50%;
+    margin: 0 auto 1.5rem;
+  }
+  h1 {
+    font-size: 3rem;
+    letter-spacing: 0.08em;
+    margin: 0 0 0.5rem;
+    font-weight: 400;
+  }
+  p.tagline {
+    color: var(--muted);
+    font-size: 1.05rem;
+    margin: 0 0 3rem;
+    line-height: 1.6;
+  }
+  .btn {
+    display: inline-block;
+    background: var(--red);
+    color: var(--paper);
+    text-decoration: none;
+    padding: 1rem 2.5rem;
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
+    border-radius: 2px;
+    transition: opacity 0.2s ease;
+  }
+  .btn:hover { opacity: 0.85; }
+  .meta {
+    margin-top: 1.25rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.03em;
+  }
+  .notice {
+    margin-top: 3.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid #2a2a2b;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.7;
+  }
+  a { color: inherit; }
+  .notice a { color: var(--paper); text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="seal"></div>
+    <h1>BeFree</h1>
+    <p class="tagline">Une application de focus hardcore pour Windows.<br>Pas de gamification molle, pas de rappels gentils.</p>
+
+    <a class="btn" href="https://github.com/gohansenseiyt-ux/BeFree/releases/download/v3.4.1/BeFreeSetup.exe">
+      Télécharger BeFreeSetup.exe
+    </a>
+    <div class="meta">Version 3.4.1 — Windows 10 / 11 — Installation sans droits admin</div>
+
+    <div class="notice">
+      Cette page est une page de téléchargement temporaire.<br>
+      Code source et notes de version sur <a href="https://github.com/gohansenseiyt-ux/BeFree">GitHub</a>,
+      toutes les releases sont listées <a href="https://github.com/gohansenseiyt-ux/BeFree/releases">ici</a>.
+    </div>
+  </div>
+</body>
+</html>
